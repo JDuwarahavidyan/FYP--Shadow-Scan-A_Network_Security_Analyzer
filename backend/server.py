@@ -1,4 +1,3 @@
-# server.py
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 import paramiko
@@ -16,7 +15,7 @@ CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 PI_HOST = "192.168.1.27"
 PI_USER = "kali"
 PI_PASS = "kali"
-SCRIPT_PATH = "/home/kali/IoT-Privacy/code/PacketCapture/wifi_cap.py"
+SCRIPT_PATH = "/home/kali/IoT-Privacy/code/PacketCapture/wifi_sniff.py"
 
 # === Global State ===
 client = None
@@ -28,67 +27,71 @@ log_queue = queue.Queue()
 
 
 def strip_ansi_codes(text):
-    """Remove ANSI escape sequences from log text."""
+    """Remove ANSI color codes from log lines."""
     ansi_escape = re.compile(r"(?:\x1B[@-_][0-?]*[ -/]*[@-~])")
     return ansi_escape.sub("", text)
 
+
+# ============================================================
+# 1️⃣ LIST ACCESS POINTS
+# ============================================================
 @app.route("/api/capture/list-aps", methods=["POST"])
 def list_aps():
     """
-    Lists available Wi-Fi access points on the Raspberry Pi.
-    For now, this returns a mock AP list (for frontend testing).
+    Runs wifi_sniffing.py to scan and return available APs.
+    Streams logs via SSH stdout for frontend live updates.
     """
-    try:
-        # ✅ Mock data for testing
-        aps = [
-            {"ssid": "Home_Network", "bssid": "00:11:22:33:44:55", "channel": 6, "power": -50},
-            {"ssid": "Guest_WiFi", "bssid": "66:77:88:99:AA:BB", "channel": 11, "power": -70},
-            {"ssid": "Office_AP", "bssid": "CC:DD:EE:FF:00:11", "channel": 1, "power": -60}
-        ]
+    data = request.get_json() or {}
+    iface = data.get("interface", "wlan1")
 
-        return jsonify({"ok": True, "aps": aps}), 200
+    try:
+        log_queue.put("📡 Initializing Access Point Scan on Raspberry Pi...")
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(PI_HOST, username=PI_USER, password=PI_PASS)
+
+        cmd = f"sudo python3 {SCRIPT_PATH}"
+        log_queue.put(f"🚀 Executing command: {cmd}")
+
+        stdin, stdout, stderr = ssh.exec_command(cmd)
+
+        output_lines = []
+        aps_json = []
+
+        # Read streaming logs from stdout
+        for line in iter(stdout.readline, ""):
+            clean = strip_ansi_codes(line.strip())
+            if not clean:
+                continue
+
+            # Push every line to frontend via SSE
+            log_queue.put(clean)
+            output_lines.append(clean)
+
+        # Try to extract JSON AP list from the end of output
+        try:
+            last_json = output_lines[-1]
+            aps_json = json.loads(last_json)
+            log_queue.put(f"✅ Found {len(aps_json)} Access Points.")
+        except Exception as parse_err:
+            log_queue.put(f"⚠️ Could not parse AP JSON: {parse_err}")
+            aps_json = []
+
+        ssh.close()
+        return jsonify({"ok": True, "aps": aps_json}), 200
 
     except Exception as e:
-        print(f"Error fetching AP list: {e}")
+        log_queue.put(f"❌ Error fetching AP list: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
-# @app.route("/api/capture/list-aps", methods=["POST"])
-# def list_aps():
-#     """
-#     Lists available Wi-Fi access points by running wifi_cap.py with --list-aps.
-#     """
-#     data = request.get_json() or {}
-#     iface = data.get("interface", "wlan1")
 
-#     try:
-#         log_queue.put("📡 Scanning for access points on Raspberry Pi...")
-#         ssh = paramiko.SSHClient()
-#         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-#         ssh.connect(PI_HOST, username=PI_USER, password=PI_PASS)
-
-#         cmd = f"sudo python3 {SCRIPT_PATH} --list-aps --iface {iface}"
-#         stdin, stdout, stderr = ssh.exec_command(cmd)
-#         output = stdout.read().decode().strip()
-#         ssh.close()
-
-#         aps = []
-#         try:
-#             aps = json.loads(output)
-#         except Exception:
-#             log_queue.put("⚠️ Failed to parse AP list JSON output.")
-#             aps = []
-
-#         return jsonify({"ok": True, "aps": aps}), 200
-#     except Exception as e:
-#         log_queue.put(f"❌ Error fetching AP list: {e}")
-#         return jsonify({"ok": False, "error": str(e)}), 500
-
-
+# ============================================================
+# 2️⃣ START CAPTURE
+# ============================================================
 @app.route("/api/capture/start", methods=["POST"])
 def start_capture():
     """
-    Starts wifi_cap.py in non-interactive (--auto) mode.
-    Expects: {"interface": "wlan1", "bssid": "...", "channel": "..."}
+    Starts capture for a selected AP using wifi_sniffing.py --bssid --channel
     """
     global client, process_active, capture_session, packet_count
 
@@ -96,6 +99,9 @@ def start_capture():
     iface = data.get("interface", "wlan1")
     bssid = data.get("bssid")
     channel = data.get("channel")
+
+    if not bssid or not channel:
+        return jsonify({"ok": False, "error": "Missing BSSID or Channel"}), 400
 
     with lock:
         if process_active:
@@ -113,11 +119,9 @@ def start_capture():
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             client.connect(PI_HOST, username=PI_USER, password=PI_PASS)
 
-            cmd = f"sudo python3 {SCRIPT_PATH} --auto --iface {iface}"
-            if bssid and channel:
-                cmd += f" --bssid {bssid} --channel {channel}"
-
+            cmd = f"sudo python3 {SCRIPT_PATH} --bssid {bssid} --channel {channel}"
             log_queue.put(f"🚀 Starting capture via: {cmd}")
+
             stdin, stdout, stderr = client.exec_command(cmd)
 
             for line in iter(stdout.readline, ""):
@@ -151,11 +155,11 @@ def start_capture():
     }), 200
 
 
+# ============================================================
+# 3️⃣ STOP CAPTURE
+# ============================================================
 @app.route("/api/capture/stop/<session_id>", methods=["POST"])
 def stop_capture(session_id):
-    """
-    Stops wifi_cap.py gracefully.
-    """
     global client, process_active, packet_count
 
     with lock:
@@ -165,7 +169,7 @@ def stop_capture(session_id):
 
     try:
         if client:
-            client.exec_command("sudo pkill -f wifi_cap.py")
+            client.exec_command("sudo pkill -f wifi_sniffing.py")
             time.sleep(0.5)
             client.close()
 
@@ -185,11 +189,11 @@ def stop_capture(session_id):
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ============================================================
+# 4️⃣ STREAM LOGS (SSE)
+# ============================================================
 @app.route("/api/capture/logs")
 def stream_logs():
-    """
-    Streams real-time logs via Server-Sent Events (SSE).
-    """
     def generate():
         while process_active or not log_queue.empty():
             try:
@@ -198,20 +202,19 @@ def stream_logs():
                 yield f'data: {{"type":"log","message":"{clean}"}}\n\n'
             except queue.Empty:
                 continue
-        yield f'data: {{"type":"info","message":"🔚 Capture finished"}}\n\n'
+        yield f'data: {{"type":"info","message":"🔚 Process finished"}}\n\n'
 
     return Response(generate(), mimetype="text/event-stream")
 
 
+# ============================================================
+# 5️⃣ MOCK PARSER (optional)
+# ============================================================
 @app.route("/api/capture/parse", methods=["POST"])
 def parse_capture():
-    """
-    Parses a capture file (mock for now).
-    """
     data = request.get_json()
     file_url = data.get("fileUrl")
     time.sleep(1)
-
     return jsonify({
         "summary": {
             "totalPackets": packet_count or 1000,
@@ -225,6 +228,7 @@ def parse_capture():
     }), 200
 
 
+# ============================================================
 if __name__ == "__main__":
     print("🚀 Flask server started on http://localhost:5000")
     app.run(host="0.0.0.0", port=5000, debug=True)
