@@ -26,6 +26,9 @@ lock = threading.Lock()
 log_queue = queue.Queue()
 
 
+# ============================================================
+# UTILITIES
+# ============================================================
 def strip_ansi_codes(text):
     """Remove ANSI color codes from log lines."""
     ansi_escape = re.compile(r"(?:\x1B[@-_][0-?]*[ -/]*[@-~])")
@@ -38,14 +41,18 @@ def strip_ansi_codes(text):
 @app.route("/api/capture/list-aps", methods=["POST"])
 def list_aps():
     """
-    Runs wifi_sniffing.py to scan and return available APs.
-    Streams logs via SSH stdout for frontend live updates.
+    Runs wifi_sniff.py on Raspberry Pi and streams logs line-by-line in real time.
+    Detects tagged JSON output (###JSON###) and returns clean AP list to frontend.
     """
+    global process_active
+
     data = request.get_json() or {}
     iface = data.get("interface", "wlan1")
 
+    process_active = True
+    log_queue.put("📡 Initializing Access Point Scan on Raspberry Pi...")
+
     try:
-        log_queue.put("📡 Initializing Access Point Scan on Raspberry Pi...")
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(PI_HOST, username=PI_USER, password=PI_PASS)
@@ -53,36 +60,51 @@ def list_aps():
         cmd = f"sudo python3 {SCRIPT_PATH}"
         log_queue.put(f"🚀 Executing command: {cmd}")
 
-        stdin, stdout, stderr = ssh.exec_command(cmd)
+        stdin, stdout, stderr = ssh.exec_command(cmd, get_pty=True)
 
-        output_lines = []
-        aps_json = []
+        aps_json = "[]"
+        json_detected = False
 
-        # Read streaming logs from stdout
-        for line in iter(stdout.readline, ""):
-            clean = strip_ansi_codes(line.strip())
+        for raw_line in iter(stdout.readline, ""):
+            clean = strip_ansi_codes(raw_line.strip())
             if not clean:
                 continue
 
-            # Push every line to frontend via SSE
-            log_queue.put(clean)
-            output_lines.append(clean)
+            # ✅ Detect tagged JSON output from wifi_sniff.py
+            if clean.startswith("###JSON###"):
+                aps_json = clean.replace("###JSON###", "").strip()
+                json_detected = True
+                continue
 
-        # Try to extract JSON AP list from the end of output
-        try:
-            last_json = output_lines[-1]
-            aps_json = json.loads(last_json)
-            log_queue.put(f"✅ Found {len(aps_json)} Access Points.")
-        except Exception as parse_err:
-            log_queue.put(f"⚠️ Could not parse AP JSON: {parse_err}")
-            aps_json = []
+            log_queue.put(clean)
 
         ssh.close()
-        return jsonify({"ok": True, "aps": aps_json}), 200
+
+        # ✅ Parse AP JSON safely
+        aps = []
+        if json_detected:
+            try:
+                aps = json.loads(aps_json)
+            except Exception as parse_err:
+                log_queue.put(f"⚠️ Failed to parse JSON: {parse_err}")
+        else:
+            log_queue.put("⚠️ No AP JSON detected. Returning empty list.")
+
+        # ✅ Only queue once — do not duplicate in both log and return
+        summary_msg = f"✅ Scan complete — found {len(aps)} access points."
+        log_queue.put(summary_msg)
+        log_queue.put("📡 Choose your AP to capture packets")
+
+        # Return plain JSON result silently — no log message duplication
+        return jsonify({"ok": True, "aps": aps}), 200
 
     except Exception as e:
         log_queue.put(f"❌ Error fetching AP list: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+    finally:
+        process_active = False
+
 
 
 # ============================================================
@@ -91,7 +113,7 @@ def list_aps():
 @app.route("/api/capture/start", methods=["POST"])
 def start_capture():
     """
-    Starts capture for a selected AP using wifi_sniffing.py --bssid --channel
+    Starts capture for a selected AP using wifi_sniff.py --bssid --channel
     """
     global client, process_active, capture_session, packet_count
 
@@ -122,7 +144,7 @@ def start_capture():
             cmd = f"sudo python3 {SCRIPT_PATH} --bssid {bssid} --channel {channel}"
             log_queue.put(f"🚀 Starting capture via: {cmd}")
 
-            stdin, stdout, stderr = client.exec_command(cmd)
+            stdin, stdout, stderr = client.exec_command(cmd, get_pty=True)
 
             for line in iter(stdout.readline, ""):
                 if not process_active:
@@ -160,6 +182,9 @@ def start_capture():
 # ============================================================
 @app.route("/api/capture/stop/<session_id>", methods=["POST"])
 def stop_capture(session_id):
+    """
+    Properly stops the remote capture process including child airodump-ng.
+    """
     global client, process_active, packet_count
 
     with lock:
@@ -168,13 +193,26 @@ def stop_capture(session_id):
         process_active = False
 
     try:
-        if client:
-            client.exec_command("sudo pkill -f wifi_sniffing.py")
-            time.sleep(0.5)
-            client.close()
+        log_queue.put("🛑 Stopping capture...")
 
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(PI_HOST, username=PI_USER, password=PI_PASS)
+
+        # ✅ Kill both the Python wrapper and airodump-ng process group
+        kill_cmd = (
+            "sudo pkill -f 'wifi_sniff.py' || true; "
+            "sudo pkill -f 'airodump-ng' || true"
+        )
+        ssh.exec_command(kill_cmd)
+
+        time.sleep(2)
+        ssh.close()
+
+        # Log and return capture metadata
         file_url = f"/captures/capture-{session_id}.cap"
-        log_queue.put("🛑 Capture stopped and file saved.")
+        log_queue.put("✅ Capture stopped. File saved successfully.")
+        
 
         return jsonify({
             "ok": True,
@@ -184,9 +222,11 @@ def stop_capture(session_id):
                 "duration": 0
             }
         }), 200
+
     except Exception as e:
         log_queue.put(f"❌ Stop error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
+
 
 
 # ============================================================
@@ -195,12 +235,16 @@ def stop_capture(session_id):
 @app.route("/api/capture/logs")
 def stream_logs():
     def generate():
-        while process_active or not log_queue.empty():
+        idle_loops = 0
+        # 🧠 Keep SSE open slightly longer (grace period)
+        while idle_loops < 5 or process_active or not log_queue.empty():
             try:
                 line = log_queue.get(timeout=1)
+                idle_loops = 0
                 clean = strip_ansi_codes(line)
                 yield f'data: {{"type":"log","message":"{clean}"}}\n\n'
             except queue.Empty:
+                idle_loops += 1
                 continue
         yield f'data: {{"type":"info","message":"🔚 Process finished"}}\n\n'
 
@@ -228,6 +272,8 @@ def parse_capture():
     }), 200
 
 
+# ============================================================
+# MAIN
 # ============================================================
 if __name__ == "__main__":
     print("🚀 Flask server started on http://localhost:5000")

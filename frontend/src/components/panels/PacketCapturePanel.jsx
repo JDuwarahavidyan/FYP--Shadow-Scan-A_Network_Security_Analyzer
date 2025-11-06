@@ -4,7 +4,6 @@ import { Card } from "../core/Card";
 import { StatusBadge } from "../core/StatusBadge";
 import { LiveLogTerminal } from "../core/LiveLogTerminal";
 import { captureAPI } from "../../api/captureAPI";
-import { Portal } from "../core/Portal";
 
 export function PacketCapturePanel({ onCaptureComplete }) {
   const [status, setStatus] = useState("idle");
@@ -18,49 +17,46 @@ export function PacketCapturePanel({ onCaptureComplete }) {
   const [scannedOnce, setScannedOnce] = useState(false);
   const dropdownRef = useRef(null);
   const eventSourceRef = useRef(null);
-  const [visibleCount, setVisibleCount] = useState(3);
-  const [loadingMore, setLoadingMore] = useState(false);
 
-
-  const addLog = (line) => {
+  const addLog = (line, isError = false) => {
     const ts = new Date().toLocaleTimeString();
-    setLogs((prev) => [...prev, { ts, line }]);
+    const formattedLine = isError ? `❌ ERROR: ${line}` : line; // 👈 error formatting
+    setLogs((prev) => [...prev, { ts, line: formattedLine }]);
   };
 
   // === Fetch APs ===
   const fetchAps = async () => {
-  try {
-    setLoadingAps(true);
-    setStatus("scanning"); // 👈 add this
-    setLogs([]);
-    addLog("📡 Starting Wi-Fi scan on Raspberry Pi...");
-    addLog("⏳ Waiting for scan results...");
+    try {
+      setLoadingAps(true);
+      setStatus("scanning");
+      setLogs([]);
+      addLog("📡 Starting Wi-Fi scan on Raspberry Pi...");
+      addLog("⏳ Waiting for scan results...");
 
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
 
-    eventSourceRef.current = captureAPI.subscribeLogs(
-      (msg) => addLog(msg),
-      () => addLog("⚠️ Log stream disconnected during scan.")
-    );
+      eventSourceRef.current = captureAPI.subscribeLogs(
+        (msg) => addLog(msg),
+        () => addLog("⚠️ Log stream disconnected during scan.")
+      );
 
       const result = await captureAPI.listAccessPoints("wlan1");
       setAps(result);
       setScannedOnce(true);
-      addLog(`✅ Scan complete — found ${result.length} access points.`);
     } catch (err) {
-      addLog(`❌ Scan failed: ${err.message}`);
+      setStatus("error");
+      addLog(err.message, true); // 👈 formatted error
     } finally {
       setLoadingAps(false);
-      setStatus("idle"); // 👈 add this to reset
+      setStatus("idle");
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
     }
   };
-
 
   // === Cleanup on unmount ===
   useEffect(() => {
@@ -106,13 +102,11 @@ export function PacketCapturePanel({ onCaptureComplete }) {
       setSessionId(result.sessionId);
       addLog("✅ Capture started successfully. Listening for packets...");
 
-      // Subscribe to live logs
       if (eventSourceRef.current) eventSourceRef.current.close();
       eventSourceRef.current = captureAPI.subscribeLogs(
         (message) => {
           addLog(message);
           if (message.toLowerCase().includes("capturing")) {
-            // Real-time update from backend
             setPacketCount((prev) => prev + 1);
           }
         },
@@ -123,7 +117,7 @@ export function PacketCapturePanel({ onCaptureComplete }) {
       );
     } catch (error) {
       setStatus("error");
-      addLog(`❌ Failed to start capture: ${error.message}`);
+      addLog(error.message, true); // 👈 formatted error
     }
   };
 
@@ -156,7 +150,7 @@ export function PacketCapturePanel({ onCaptureComplete }) {
       }
     } catch (error) {
       setStatus("error");
-      addLog(`❌ Error while stopping: ${error.message}`);
+      addLog(error.message, true); // 👈 formatted error
     }
   };
 
@@ -232,45 +226,41 @@ export function PacketCapturePanel({ onCaptureComplete }) {
 
             {/* Dropdown Menu */}
             {dropdownOpen && (
-  <div
-    className="absolute left-0 top-full mt-1 w-full z-9999 
-                bg-black/95 border border-cyan-700/70 rounded-md 
-                shadow-[0_0_20px_rgba(0,255,255,0.35)] backdrop-blur-md 
-                divide-y divide-cyan-900/40
-                overflow-y-auto max-h-40 
-                scrollbar-thin scrollbar-thumb-cyan-700/60 scrollbar-track-cyan-900/20"
-  >
-    {aps.length === 0 ? (
-      <div className="text-gray-400 text-xs p-3 text-center font-mono">
-        No Access Points Found
-      </div>
-    ) : (
-      aps.map((ap) => (
-        <div
-          key={ap.bssid}
-          onClick={() => {
-            setSelectedAp(ap);
-            setDropdownOpen(false);
-          }}
-          className="px-3 py-2 text-sm text-cyan-200 font-mono 
-                     hover:bg-cyan-500/20 cursor-pointer transition-all"
-        >
-          <div className="text-white font-semibold text-[13px] tracking-wide">
-            {ap.ssid || "<hidden>"}
+              <div
+                className="absolute left-0 top-full mt-1 w-full z-9999 
+                            bg-black/95 border border-cyan-700/70 rounded-md 
+                            shadow-[0_0_20px_rgba(0,255,255,0.35)] backdrop-blur-md 
+                            divide-y divide-cyan-900/40
+                            overflow-y-auto max-h-40 
+                            scrollbar-thin scrollbar-thumb-cyan-700/60 scrollbar-track-cyan-900/20"
+              >
+                {aps.length === 0 ? (
+                  <div className="text-gray-400 text-xs p-3 text-center font-mono">
+                    No Access Points Found
+                  </div>
+                ) : (
+                  aps.map((ap) => (
+                    <div
+                      key={ap.bssid}
+                      onClick={() => {
+                        setSelectedAp(ap);
+                        setDropdownOpen(false);
+                      }}
+                      className="px-3 py-2 text-sm text-cyan-200 font-mono 
+                                 hover:bg-cyan-500/20 cursor-pointer transition-all"
+                    >
+                      <div className="text-white font-semibold text-[13px] tracking-wide">
+                        {ap.ssid || "<hidden>"}
+                      </div>
+                      <div className="text-[11px] text-cyan-400/70 mt-0.5">
+                        {ap.bssid} | CH {ap.channel} | PWR {ap.power}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
-          <div className="text-[11px] text-cyan-400/70 mt-0.5">
-            {ap.bssid} | CH {ap.channel} | PWR {ap.power}
-          </div>
-        </div>
-      ))
-    )}
-  </div>
-)}
-
-          </div>
-
-
-
 
           {/* Legal Warning Banner */}
           <div className="flex items-start gap-2 mt-3 p-3 rounded-md border border-red-500/40 
@@ -295,7 +285,6 @@ export function PacketCapturePanel({ onCaptureComplete }) {
               </span>
             </div>
           </div>
-
 
           {/* Control Buttons */}
           <div className="grid grid-cols-2 gap-3 pt-2">
