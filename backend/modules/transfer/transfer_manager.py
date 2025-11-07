@@ -5,14 +5,12 @@ import paramiko
 import time
 from datetime import datetime
 from modules.transfer.config import (
-    PI_HOST,
-    PI_USER,
-    PI_PASS,
-    SSH_PORT,
     REMOTE_CAPTURE_DIR,
     CAPTURE_ARCHIVE_DIR,
     LOCAL_DOWNLOAD_DIR,
 )
+
+from modules.config import PI_HOST, PI_USER, PI_PASS, SSH_PORT
 
 
 class TransferError(Exception):
@@ -61,8 +59,8 @@ def download_file_from_pi(remote_path=None, local_dir=LOCAL_DOWNLOAD_DIR, timeou
     """
     Downloads the latest capture file from Raspberry Pi → backend (Windows).
     After download:
-      1️⃣ Moves it into Archive/<DDMMYYYY>/<HHMM>/ on the Pi.
-      2️⃣ Cleans up /Capture/ (removes leftover capture-* files).
+       Moves it into Archive/<DDMMYYYY>/<HHMM>/ on the Pi.
+       Cleans up /Capture/ (removes leftover capture-* files).
     """
     ssh = None
     sftp = None

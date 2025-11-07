@@ -18,25 +18,36 @@ export function PacketCapturePanel({ onCaptureComplete }) {
   const dropdownRef = useRef(null);
   const eventSourceRef = useRef(null);
 
+  // === Helper: Add logs ===
   const addLog = (line, isError = false) => {
     const ts = new Date().toLocaleTimeString();
-    const formattedLine = isError ? `❌ ERROR: ${line}` : line; // 👈 error formatting
+    const formattedLine = isError ? `❌ ERROR: ${line}` : line;
     setLogs((prev) => [...prev, { ts, line: formattedLine }]);
   };
 
-  // === Fetch APs ===
+  // === Helper: Add section divider ===
+  const addDivider = (label) => {
+    const divider = `──────────── ${label} ────────────`;
+    setLogs((prev) => [...prev, { ts: "", line: divider }]);
+  };
+
+  // === Fetch Access Points ===
   const fetchAps = async () => {
     try {
       setLoadingAps(true);
       setStatus("scanning");
       setLogs([]);
+      addDivider("NEW SCAN SESSION");
       addLog("📡 Starting Wi-Fi scan on Raspberry Pi...");
       addLog("⏳ Waiting for scan results...");
 
+      // ✅ Close any previous EventSource before starting new one
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
 
+      // Start new SSE subscription
       eventSourceRef.current = captureAPI.subscribeLogs(
         (msg) => addLog(msg),
         () => addLog("⚠️ Log stream disconnected during scan.")
@@ -47,36 +58,17 @@ export function PacketCapturePanel({ onCaptureComplete }) {
       setScannedOnce(true);
     } catch (err) {
       setStatus("error");
-      addLog(err.message, true); // 👈 formatted error
+      addLog(err.message, true);
     } finally {
       setLoadingAps(false);
       setStatus("idle");
+      // Close SSE after scan completes
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
     }
   };
-
-  // === Cleanup on unmount ===
-  useEffect(() => {
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-    };
-  }, []);
-
-  // === Dropdown close when clicking outside ===
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   // === Start Capture ===
   const startCapture = async () => {
@@ -88,8 +80,9 @@ export function PacketCapturePanel({ onCaptureComplete }) {
     setStatus("capturing");
     setLogs([]);
     setPacketCount(0);
-    addLog(`🎯 Target: ${selectedAp.ssid} (${selectedAp.bssid}) on CH ${selectedAp.channel}`);
-    addLog("🚀 Initializing packet capture...");
+    // addDivider("NEW CAPTURE SESSION");
+    addLog(`->  Target: ${selectedAp.ssid} (${selectedAp.bssid}) on CH ${selectedAp.channel}`);
+    addLog("[+] Initializing packet capture...");
 
     try {
       const result = await captureAPI.startCapture(
@@ -100,9 +93,15 @@ export function PacketCapturePanel({ onCaptureComplete }) {
       );
 
       setSessionId(result.sessionId);
-      addLog("✅ Capture started successfully. Listening for packets...");
+      addLog("[✓] Capture started successfully. Listening for packets...");
 
-      if (eventSourceRef.current) eventSourceRef.current.close();
+      // Close any previous EventSource before opening new one
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+
+      // Start log streaming
       eventSourceRef.current = captureAPI.subscribeLogs(
         (message) => {
           addLog(message);
@@ -112,12 +111,12 @@ export function PacketCapturePanel({ onCaptureComplete }) {
         },
         (error) => {
           console.error("Log stream error:", error);
-          addLog("⚠️ Log stream disconnected.");
+          addLog("[!] Log stream disconnected.");
         }
       );
     } catch (error) {
       setStatus("error");
-      addLog(error.message, true); // 👈 formatted error
+      addLog(error.message, true);
     }
   };
 
@@ -128,6 +127,7 @@ export function PacketCapturePanel({ onCaptureComplete }) {
     setStatus("stopping");
     addLog("🛑 Stopping capture...");
 
+    //  Close the existing EventSource stream before stopping
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
@@ -135,25 +135,47 @@ export function PacketCapturePanel({ onCaptureComplete }) {
 
     try {
       const result = await captureAPI.stopCapture(sessionId);
-      addLog(`✅ Capture stopped. File saved: ${result.fileUrl}`);
-      addLog(`📊 Total packets captured: ${result.meta.packetCount}`);
+      addLog(`[✓] Capture stopped. File saved: ${result.fileUrl}`);
+      addLog(`[+] Total packets captured: ${result.meta.packetCount}`);
       setPacketCount(result.meta.packetCount);
       setStatus("idle");
       setSessionId(null);
 
-      addLog("🔍 Parsing capture file...");
+      addLog("[/] Parsing capture file...");
       const parsed = await captureAPI.parseCapture(result.fileUrl);
-      addLog("✅ Parse complete.");
+      addLog("[✓] Parse complete.");
 
       if (onCaptureComplete) {
         onCaptureComplete(result.fileUrl, parsed);
       }
     } catch (error) {
       setStatus("error");
-      addLog(error.message, true); // 👈 formatted error
+      addLog(error.message, true);
     }
   };
 
+  // === Cleanup on unmount ===
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, []);
+
+  // === Dropdown close on outside click ===
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // === Render UI ===
   return (
     <div className="space-y-4">
       <Card title="Packet Capture Control" icon={Wifi}>
@@ -208,11 +230,14 @@ export function PacketCapturePanel({ onCaptureComplete }) {
                         {selectedAp.ssid || "<hidden>"}
                       </span>
                       <span className="text-[11px] text-cyan-400/70 mt-px">
-                        {selectedAp.bssid} | CH {selectedAp.channel} | PWR {selectedAp.power}
+                        {selectedAp.bssid} | CH {selectedAp.channel} | PWR{" "}
+                        {selectedAp.power}
                       </span>
                     </>
                   ) : (
-                    <span className="text-cyan-400/70 mt-2 mb-2 text-sm">-- Choose AP --</span>
+                    <span className="text-cyan-400/70 mt-2 mb-2 text-sm">
+                      -- Choose AP --
+                    </span>
                   )}
                 </div>
 
@@ -262,17 +287,17 @@ export function PacketCapturePanel({ onCaptureComplete }) {
             )}
           </div>
 
-          {/* Legal Warning Banner */}
+          {/* Legal Warning */}
           <div className="flex items-start gap-2 mt-3 p-3 rounded-md border border-red-500/40 
                           bg-red-950/20 text-red-300 font-mono text-xs 
                           shadow-[0_0_8px_rgba(255,0,0,0.1)]">
             <div className="pt-px">
-              <svg xmlns="http://www.w3.org/2000/svg" 
-                  className="w-4 h-4 text-red-400 shrink-0" 
-                  fill="none" viewBox="0 0 24 24" 
-                  stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" 
-                      d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              <svg xmlns="http://www.w3.org/2000/svg"
+                className="w-4 h-4 text-red-400 shrink-0"
+                fill="none" viewBox="0 0 24 24"
+                stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
               </svg>
             </div>
             <div className="flex flex-col leading-relaxed">
