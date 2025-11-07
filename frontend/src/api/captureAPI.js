@@ -79,18 +79,33 @@ export const captureAPI = {
    * Calls: GET /api/capture/logs
    */
   subscribeLogs(onMessage, onError) {
-    const eventSource = new EventSource(`${BASE_URL}/api/capture/logs`);
+  const eventSource = new EventSource(`${BASE_URL}/api/capture/logs`);
 
     eventSource.onmessage = (event) => {
       try {
-        // Strip any ANSI escape codes
-        const sanitized = event.data.replace(/\x1B\[[0-9;]*[A-Za-z]/g, "");
-        const data = JSON.parse(sanitized);
+        // Step 1️⃣ — ignore empty messages
+        if (!event.data || event.data.trim() === "") return;
 
-        // Forward the plain message only
-        if (data.message) onMessage(data.message);
+        // Step 2️⃣ — remove ANSI color codes
+        let sanitized = event.data.replace(/\x1B\[[0-9;]*[A-Za-z]/g, "");
+
+        // Step 3️⃣ — normalize Windows backslashes safely
+        sanitized = sanitized.replace(/\\/g, "\\\\");
+
+        // Step 4️⃣ — sometimes Flask sends multiple JSON objects joined by \n\n
+        const parts = sanitized.split(/\n+/).filter(Boolean);
+
+        for (const part of parts) {
+          try {
+            const data = JSON.parse(part);
+            if (data?.message) onMessage(data.message);
+          } catch (jsonErr) {
+            // Just log and continue instead of breaking the stream
+            console.debug("Skipping unparsable SSE fragment:", part);
+          }
+        }
       } catch (err) {
-        console.error("Failed to parse SSE event:", event.data);
+        console.warn("⚠️ Failed to parse SSE event:", event.data);
       }
     };
 
@@ -102,4 +117,6 @@ export const captureAPI = {
 
     return eventSource;
   },
+
+
 };

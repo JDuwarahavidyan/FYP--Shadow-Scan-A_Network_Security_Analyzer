@@ -1,6 +1,3 @@
-PI_HOST = "192.168.1.27"
-PI_USER = "kali"
-PI_PASS = "kali"
 SCRIPT_PATH = "/home/kali/IoT-Privacy/code/PacketCapture/wifi_sniff.py"
 
 client = None
