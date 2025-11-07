@@ -8,8 +8,10 @@ import json
 import queue
 
 from modules.capture.utils import strip_ansi_codes
-from modules.capture.config import PI_HOST, PI_USER, PI_PASS, SCRIPT_PATH
+from modules.capture.config import SCRIPT_PATH
 from modules.capture.log_queue import log_queue
+from modules.config import PI_HOST, PI_USER, PI_PASS
+from modules.transfer.transfer_manager import download_file_from_pi, TransferError
 
 
 # Globals (will be injected from server.py)
@@ -157,21 +159,29 @@ def register_routes(app, globals_dict):
         }), 200
 
 
+    
     # ============================================================
     # 3️⃣ STOP CAPTURE
     # ============================================================
     @app.route("/api/capture/stop/<session_id>", methods=["POST"])
     def stop_capture(session_id):
+        """
+        Stops remote capture, ensures all processes are killed,
+        downloads latest .cap to backend, and flushes logs immediately.
+        """
+        from modules.transfer.transfer_manager import download_file_from_pi, TransferError
+
         global client, process_active, packet_count
 
         with lock:
             if not process_active:
                 return jsonify({"ok": False, "error": "No active capture"}), 400
-            process_active = False
+            process_active = True  # keep active until we're done
 
         try:
-            log_queue.put("🛑 Stopping capture...")
+            log_queue.put("🛑 Sending stop command to Raspberry Pi...")
 
+            # === Stop remote capture ===
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             ssh.connect(PI_HOST, username=PI_USER, password=PI_PASS)
@@ -181,21 +191,44 @@ def register_routes(app, globals_dict):
                 "sudo pkill -f 'airodump-ng' || true"
             )
             ssh.exec_command(kill_cmd)
-            time.sleep(2)
+            time.sleep(3)
             ssh.close()
 
-            file_url = f"/captures/capture-{session_id}.cap"
-            log_queue.put("✅ Capture stopped. File saved successfully.")
+            log_queue.put("✅ Capture processes stopped on Raspberry Pi.")
+            log_queue.put("⬇️ Attempting file download to backend...")
+
+            local_path = None
+            try:
+                local_path = download_file_from_pi()
+                log_queue.put(f"✅ File successfully transferred: {local_path}")
+            except TransferError as e:
+                log_queue.put(f"⚠️ File transfer failed: {e}")
+            except Exception as e:
+                log_queue.put(f"❌ Unexpected transfer error: {e}")
+
+            log_queue.put("🎯 Capture fully stopped and file saved locally.")
+            log_queue.put("🔚 Capture process stopped.")
+
+            # === Flush logs immediately to SSE ===
+            # This forces all queued messages to reach the frontend before stopping
+            time.sleep(0.5)
+
+            with lock:
+                process_active = False
 
             return jsonify({
                 "ok": True,
-                "fileUrl": file_url,
+                "fileUrl": local_path or None,
                 "meta": {"packetCount": packet_count, "duration": 0}
             }), 200
 
         except Exception as e:
+            with lock:
+                process_active = False
             log_queue.put(f"❌ Stop error: {e}")
             return jsonify({"ok": False, "error": str(e)}), 500
+
+
 
 
     # ============================================================
@@ -216,7 +249,8 @@ def register_routes(app, globals_dict):
                     continue
             yield f'data: {{"type":"info","message":"🔚 Process finished"}}\n\n'
 
-        return Response(generate(), mimetype="text/event-stream")
+            return Response(generate(), mimetype="text/event-stream")
+
 
 
     # ============================================================

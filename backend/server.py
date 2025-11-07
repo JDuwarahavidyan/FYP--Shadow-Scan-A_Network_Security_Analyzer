@@ -1,6 +1,7 @@
 from flask import Flask
 from flask_cors import CORS
 import threading
+import modules.config as config
 
 # Import from your capture module
 from modules.capture import config
