@@ -57,7 +57,7 @@ def register_routes(app, globals_dict):
             ssh.connect(PI_HOST, username=PI_USER, password=PI_PASS)
 
             cmd = f"sudo python3 {SCRIPT_PATH}"
-            log_queue.put(f"[$] Activating Passive WiFi Sniffer - By Team Shadow-Scan ⚡")
+            log_queue.put(f"[$] Activating Passive WiFi Sniffer - By Team Shadow-Scan <-")
 
             stdin, stdout, stderr = ssh.exec_command(cmd, get_pty=True)
 

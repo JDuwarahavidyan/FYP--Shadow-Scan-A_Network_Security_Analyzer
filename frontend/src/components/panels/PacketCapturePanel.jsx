@@ -78,7 +78,7 @@ export function PacketCapturePanel({ onCaptureComplete }) {
     // addDivider("NEW CAPTURE SESSION");
     addLog(`->  Target: ${selectedAp.ssid} (${selectedAp.bssid}) on CH ${selectedAp.channel}`);
     addLog("[/] Initializing packet capture ...");
-    addLog("[$] Activating Passive WiFi Sniffer - By Team Shadow-Scan ⚡");
+    addLog("[$] Activating Passive WiFi Sniffer - By Team Shadow-Scan <-");
 
     try {
       const result = await captureAPI.startCapture(
