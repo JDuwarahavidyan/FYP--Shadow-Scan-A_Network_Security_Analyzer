@@ -25,11 +25,7 @@ export function PacketCapturePanel({ onCaptureComplete }) {
     setLogs((prev) => [...prev, { ts, line: formattedLine }]);
   };
 
-  // === Helper: Add section divider ===
-  const addDivider = (label) => {
-    const divider = `──────────── ${label} ────────────`;
-    setLogs((prev) => [...prev, { ts: "", line: divider }]);
-  };
+  
 
   // === Fetch Access Points ===
   const fetchAps = async () => {
@@ -37,20 +33,19 @@ export function PacketCapturePanel({ onCaptureComplete }) {
       setLoadingAps(true);
       setStatus("scanning");
       setLogs([]);
-      addDivider("NEW SCAN SESSION");
-      addLog("📡 Starting Wi-Fi scan on Raspberry Pi...");
-      addLog("⏳ Waiting for scan results...");
+    
 
-      // ✅ Close any previous EventSource before starting new one
+      // Close any previous EventSource before starting new one
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
+      // setLogs([]);
 
       // Start new SSE subscription
       eventSourceRef.current = captureAPI.subscribeLogs(
         (msg) => addLog(msg),
-        () => addLog("⚠️ Log stream disconnected during scan.")
+        () => addLog("[!] Log stream disconnected during scan.")
       );
 
       const result = await captureAPI.listAccessPoints("wlan1");
@@ -73,7 +68,7 @@ export function PacketCapturePanel({ onCaptureComplete }) {
   // === Start Capture ===
   const startCapture = async () => {
     if (!selectedAp) {
-      addLog("⚠️ Please select an Access Point before starting capture.");
+      addLog("[!] Please select an Access Point before starting capture.");
       return;
     }
 
@@ -82,7 +77,8 @@ export function PacketCapturePanel({ onCaptureComplete }) {
     setPacketCount(0);
     // addDivider("NEW CAPTURE SESSION");
     addLog(`->  Target: ${selectedAp.ssid} (${selectedAp.bssid}) on CH ${selectedAp.channel}`);
-    addLog("[+] Initializing packet capture...");
+    addLog("[/] Initializing packet capture ...");
+    addLog("[$] Activating Passive WiFi Sniffer - By Team Shadow-Scan ⚡");
 
     try {
       const result = await captureAPI.startCapture(
@@ -100,6 +96,7 @@ export function PacketCapturePanel({ onCaptureComplete }) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
+      // setLogs([]);
 
       // Start log streaming
       eventSourceRef.current = captureAPI.subscribeLogs(
@@ -125,7 +122,7 @@ export function PacketCapturePanel({ onCaptureComplete }) {
     if (!sessionId) return;
 
     setStatus("stopping");
-    addLog("🛑 Stopping capture...");
+    addLog("[-] Stopping capture ...");
 
     //  Close the existing EventSource stream before stopping
     if (eventSourceRef.current) {
@@ -135,18 +132,18 @@ export function PacketCapturePanel({ onCaptureComplete }) {
 
     try {
       const result = await captureAPI.stopCapture(sessionId);
-      addLog(`[✓] Capture stopped. File saved: ${result.fileUrl}`);
+      addLog(`[✓] Capture stopped. File saved locally.`);
       addLog(`[+] Total packets captured: ${result.meta.packetCount}`);
       setPacketCount(result.meta.packetCount);
       setStatus("idle");
       setSessionId(null);
 
-      addLog("[/] Parsing capture file...");
+      addLog("[/] Parsing capture file ...");
       const parsed = await captureAPI.parseCapture(result.fileUrl);
       addLog("[✓] Parse complete.");
 
       if (onCaptureComplete) {
-        onCaptureComplete(result.fileUrl, parsed);
+        onCaptureComplete(result.fileUrl, parsed);  
       }
     } catch (error) {
       setStatus("error");
