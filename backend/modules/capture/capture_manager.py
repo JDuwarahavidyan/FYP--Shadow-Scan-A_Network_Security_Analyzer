@@ -29,18 +29,27 @@ def register_routes(app, globals_dict):
     lock = globals_dict["lock"]
     packet_count = globals_dict["packet_count"]
     capture_session = globals_dict["capture_session"]
+    
+    def clear_log_queue():
+        while not log_queue.empty():
+            try:
+                log_queue.get_nowait()
+            except queue.Empty:
+                break
+
 
     # ============================================================
     # LIST ACCESS POINTS
     # ============================================================
     @app.route("/api/capture/list-aps", methods=["POST"])
     def list_aps():
+        clear_log_queue()
         global process_active
         data = request.get_json() or {}
         iface = data.get("interface", "wlan1")
 
         process_active = True
-        log_queue.put("📡 Initializing Access Point Scan on Raspberry Pi...")
+        log_queue.put("[/] Initializing Wifi Sniffing on Raspberry Pi ...")
 
         try:
             ssh = paramiko.SSHClient()
@@ -48,7 +57,7 @@ def register_routes(app, globals_dict):
             ssh.connect(PI_HOST, username=PI_USER, password=PI_PASS)
 
             cmd = f"sudo python3 {SCRIPT_PATH}"
-            log_queue.put(f"[+] Executing command: {cmd}")
+            log_queue.put(f"[$] Activating Passive WiFi Sniffer - By Team Shadow-Scan ⚡")
 
             stdin, stdout, stderr = ssh.exec_command(cmd, get_pty=True)
 
@@ -80,7 +89,7 @@ def register_routes(app, globals_dict):
 
             summary_msg = f"[✓] Scan complete — found {len(aps)} access points."
             log_queue.put(summary_msg)
-            log_queue.put("[*] Choose your AP to capture packets")
+            log_queue.put("[*] Choose your Access Point to capture packets.")
 
             return jsonify({"ok": True, "aps": aps}), 200
 
@@ -124,7 +133,7 @@ def register_routes(app, globals_dict):
                 client.connect(PI_HOST, username=PI_USER, password=PI_PASS)
 
                 cmd = f"sudo python3 {SCRIPT_PATH} --bssid {bssid} --channel {channel}"
-                log_queue.put(f"[+] Starting capture via: {cmd}")
+                # log_queue.put(f"[$] Activating Passive WiFi Sniffer - By Team Shadow-Scan")
 
                 stdin, stdout, stderr = client.exec_command(cmd, get_pty=True)
 
@@ -194,20 +203,20 @@ def register_routes(app, globals_dict):
             time.sleep(3)
             ssh.close()
 
-            log_queue.put("[✓] Capture processes stopped on Raspberry Pi.")
-            log_queue.put("[⬇] Attempting file download to backend...")
+            # log_queue.put("[✓] Capture processes stopped on Raspberry Pi.")
+            # log_queue.put("[⬇] Attempting file download to backend...")
 
             local_path = None
             try:
                 local_path = download_file_from_pi()
-                log_queue.put(f"[✓] File successfully transferred: {local_path}")
+                # log_queue.put(f"[✓] File successfully transferred: {local_path}")
             except TransferError as e:
                 log_queue.put(f"[!] File transfer failed: {e}")
             except Exception as e:
                 log_queue.put(f"[✗] Unexpected transfer error: {e}")
 
-            log_queue.put("[✓] Capture fully stopped and file saved locally.")
-            log_queue.put("[-] Capture process stopped.")
+            # log_queue.put("[✓] Capture fully stopped and file saved locally.")
+            # log_queue.put("[-] Capture process stopped.")
 
             # === Flush logs immediately to SSE ===
             # This forces all queued messages to reach the frontend before stopping
