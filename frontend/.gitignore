@@ -1,24 +1,63 @@
-# Logs
-logs
+# Python & Backend
+__pycache__/
+*.py[cod]
+*$py.class
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+*.tmp
+*.bak
+*.swp
 
-node_modules
-dist
-dist-ssr
-*.local
+# Virtual environment folders
+backend/.shadow-venv/
+venv/
+env/
+.venv/
+*.env
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# Downloaded or generated data
+backend/downloads/
+backend/__pycache__/
+modules/__pycache__/
+modules/*/__pycache__/
+modules/capture/__pycache__/
+modules/transfer/__pycache__/
+
+# Test or temporary scripts
+test_*.py
+*.test.py
+
+# OS-generated files
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+
+
+# Node & Frontend
+
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+frontend/.DS_Store
+frontend/*.log
+
+
+# IDE & Editor Settings
+
+.vscode/
+.idea/
+*.code-workspace
+
+
+# Sensitive files
+
+*.pem
+*.key
+*.crt
+*.config
+secrets.json
+
+
+# Misc cleanup
+
+*.tar.gz
+*.zip
+*.7z
