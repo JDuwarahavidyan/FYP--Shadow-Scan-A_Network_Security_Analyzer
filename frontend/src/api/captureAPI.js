@@ -83,16 +83,16 @@ export const captureAPI = {
 
     eventSource.onmessage = (event) => {
       try {
-        // Step 1️⃣ — ignore empty messages
+        // Step 1 — ignore empty messages
         if (!event.data || event.data.trim() === "") return;
 
-        // Step 2️⃣ — remove ANSI color codes
+        // Step 2 — remove ANSI color codes
         let sanitized = event.data.replace(/\x1B\[[0-9;]*[A-Za-z]/g, "");
 
-        // Step 3️⃣ — normalize Windows backslashes safely
+        // Step 3 — normalize Windows backslashes safely
         sanitized = sanitized.replace(/\\/g, "\\\\");
 
-        // Step 4️⃣ — sometimes Flask sends multiple JSON objects joined by \n\n
+        // Step 4 — sometimes Flask sends multiple JSON objects joined by \n\n
         const parts = sanitized.split(/\n+/).filter(Boolean);
 
         for (const part of parts) {
@@ -105,12 +105,12 @@ export const captureAPI = {
           }
         }
       } catch (err) {
-        console.warn("⚠️ Failed to parse SSE event:", event.data);
+        console.warn("[!] Failed to parse SSE event:", event.data);
       }
     };
 
     eventSource.onerror = (err) => {
-      console.error("SSE connection error:", err);
+      console.error("[!] SSE connection error:", err);
       eventSource.close();
       if (onError) onError(err);
     };

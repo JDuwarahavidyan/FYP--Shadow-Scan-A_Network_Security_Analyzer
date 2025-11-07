@@ -36,5 +36,5 @@ register_routes(app, globals_dict)
 # MAIN ENTRY
 # ============================================================
 if __name__ == "__main__":
-    print("🚀 Flask server started on http://localhost:5000")
+    print("[*] Flask server started on http://localhost:5000")
     app.run(host="0.0.0.0", port=5000, debug=True)

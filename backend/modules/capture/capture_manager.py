@@ -1,5 +1,5 @@
 # capture_manager.py
-from flask import jsonify, Response, request
+from flask import app, jsonify, Response, request
 from datetime import datetime
 import threading
 import paramiko
@@ -31,7 +31,7 @@ def register_routes(app, globals_dict):
     capture_session = globals_dict["capture_session"]
 
     # ============================================================
-    # 1️⃣ LIST ACCESS POINTS
+    # LIST ACCESS POINTS
     # ============================================================
     @app.route("/api/capture/list-aps", methods=["POST"])
     def list_aps():
@@ -48,7 +48,7 @@ def register_routes(app, globals_dict):
             ssh.connect(PI_HOST, username=PI_USER, password=PI_PASS)
 
             cmd = f"sudo python3 {SCRIPT_PATH}"
-            log_queue.put(f"🚀 Executing command: {cmd}")
+            log_queue.put(f"[+] Executing command: {cmd}")
 
             stdin, stdout, stderr = ssh.exec_command(cmd, get_pty=True)
 
@@ -74,18 +74,18 @@ def register_routes(app, globals_dict):
                 try:
                     aps = json.loads(aps_json)
                 except Exception as parse_err:
-                    log_queue.put(f"⚠️ Failed to parse JSON: {parse_err}")
+                    log_queue.put(f"[!] Failed to parse JSON: {parse_err}")
             else:
-                log_queue.put("⚠️ No AP JSON detected. Returning empty list.")
+                log_queue.put("[!] No AP JSON detected. Returning empty list.")
 
-            summary_msg = f"✅ Scan complete — found {len(aps)} access points."
+            summary_msg = f"[✓] Scan complete — found {len(aps)} access points."
             log_queue.put(summary_msg)
-            log_queue.put("📡 Choose your AP to capture packets")
+            log_queue.put("[*] Choose your AP to capture packets")
 
             return jsonify({"ok": True, "aps": aps}), 200
 
         except Exception as e:
-            log_queue.put(f"❌ Error fetching AP list: {e}")
+            log_queue.put(f"[!] Error fetching AP list: {e}")
             return jsonify({"ok": False, "error": str(e)}), 500
 
         finally:
@@ -93,7 +93,7 @@ def register_routes(app, globals_dict):
 
 
     # ============================================================
-    # 2️⃣ START CAPTURE
+    # START CAPTURE
     # ============================================================
     @app.route("/api/capture/start", methods=["POST"])
     def start_capture():
@@ -124,7 +124,7 @@ def register_routes(app, globals_dict):
                 client.connect(PI_HOST, username=PI_USER, password=PI_PASS)
 
                 cmd = f"sudo python3 {SCRIPT_PATH} --bssid {bssid} --channel {channel}"
-                log_queue.put(f"🚀 Starting capture via: {cmd}")
+                log_queue.put(f"[+] Starting capture via: {cmd}")
 
                 stdin, stdout, stderr = client.exec_command(cmd, get_pty=True)
 
@@ -138,7 +138,7 @@ def register_routes(app, globals_dict):
                             packet_count += 1
 
             except Exception as e:
-                log_queue.put(f"❌ Capture error: {e}")
+                log_queue.put(f"[✗] Capture error: {e}")
             finally:
                 if client:
                     try:
@@ -147,7 +147,7 @@ def register_routes(app, globals_dict):
                         pass
                 with lock:
                     process_active = False
-                log_queue.put("🔚 Capture process stopped.")
+                log_queue.put("[-] Capture process stopped.")
 
         thread = threading.Thread(target=run_capture, daemon=True)
         thread.start()
@@ -161,7 +161,7 @@ def register_routes(app, globals_dict):
 
     
     # ============================================================
-    # 3️⃣ STOP CAPTURE
+    # STOP CAPTURE
     # ============================================================
     @app.route("/api/capture/stop/<session_id>", methods=["POST"])
     def stop_capture(session_id):
@@ -194,20 +194,20 @@ def register_routes(app, globals_dict):
             time.sleep(3)
             ssh.close()
 
-            log_queue.put("✅ Capture processes stopped on Raspberry Pi.")
-            log_queue.put("⬇️ Attempting file download to backend...")
+            log_queue.put("[✓] Capture processes stopped on Raspberry Pi.")
+            log_queue.put("[⬇] Attempting file download to backend...")
 
             local_path = None
             try:
                 local_path = download_file_from_pi()
-                log_queue.put(f"✅ File successfully transferred: {local_path}")
+                log_queue.put(f"[✓] File successfully transferred: {local_path}")
             except TransferError as e:
-                log_queue.put(f"⚠️ File transfer failed: {e}")
+                log_queue.put(f"[!] File transfer failed: {e}")
             except Exception as e:
-                log_queue.put(f"❌ Unexpected transfer error: {e}")
+                log_queue.put(f"[✗] Unexpected transfer error: {e}")
 
-            log_queue.put("🎯 Capture fully stopped and file saved locally.")
-            log_queue.put("🔚 Capture process stopped.")
+            log_queue.put("[✓] Capture fully stopped and file saved locally.")
+            log_queue.put("[-] Capture process stopped.")
 
             # === Flush logs immediately to SSE ===
             # This forces all queued messages to reach the frontend before stopping
@@ -225,36 +225,46 @@ def register_routes(app, globals_dict):
         except Exception as e:
             with lock:
                 process_active = False
-            log_queue.put(f"❌ Stop error: {e}")
+            log_queue.put(f"[✗] Stop error: {e}")
             return jsonify({"ok": False, "error": str(e)}), 500
 
 
 
 
+    
     # ============================================================
-    # 4️⃣ STREAM LOGS (SSE)
+    # STREAM LOGS (SSE)
     # ============================================================
-    @app.route("/api/capture/logs")
+    @app.route("/api/capture/logs", methods=["GET"])
     def stream_logs():
+        """
+        Streams live log messages via SSE to the React frontend.
+        Flushes all pending logs immediately, then closes when idle.
+        """
         def generate():
-            idle_loops = 0
-            while idle_loops < 5 or process_active or not log_queue.empty():
+            while True:
                 try:
                     line = log_queue.get(timeout=1)
-                    idle_loops = 0
-                    clean = strip_ansi_codes(line)
+                    clean = strip_ansi_codes(line).replace('"', '\\"')
                     yield f'data: {{"type":"log","message":"{clean}"}}\n\n'
                 except queue.Empty:
-                    idle_loops += 1
+                    # If process not active and log queue empty, break immediately
+                    if not process_active and log_queue.empty():
+                        yield f'data: {{"type":"info","message":"🔚 Process finished"}}\n\n'
+                        break
                     continue
-            yield f'data: {{"type":"info","message":"🔚 Process finished"}}\n\n'
 
-            return Response(generate(), mimetype="text/event-stream")
+        response = Response(generate(), mimetype="text/event-stream")
+        response.headers["Cache-Control"] = "no-cache"
+        response.headers["X-Accel-Buffering"] = "no"
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        return response
+
 
 
 
     # ============================================================
-    # 5️⃣ MOCK PARSER
+    # MOCK PARSER
     # ============================================================
     @app.route("/api/capture/parse", methods=["POST"])
     def parse_capture():
