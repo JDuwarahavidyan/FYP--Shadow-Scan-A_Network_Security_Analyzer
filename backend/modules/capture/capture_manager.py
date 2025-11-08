@@ -1,5 +1,5 @@
 # capture_manager.py
-from flask import app, jsonify, Response, request
+from flask import jsonify, Response, request
 from datetime import datetime
 import threading
 import paramiko
@@ -14,12 +14,14 @@ from modules.config import PI_HOST, PI_USER, PI_PASS
 from modules.transfer.transfer_manager import download_file_from_pi, TransferError
 
 
+
 # Globals (will be injected from server.py)
 process_active = None
 client = None
 lock = None
 packet_count = None
 capture_session = None
+
 
 
 def register_routes(app, globals_dict):
@@ -178,7 +180,7 @@ def register_routes(app, globals_dict):
         Stops remote capture, ensures all processes are killed,
         downloads latest .cap to backend, and flushes logs immediately.
         """
-        from modules.transfer.transfer_manager import download_file_from_pi, TransferError
+        
 
         global client, process_active, packet_count
 
@@ -279,9 +281,8 @@ def register_routes(app, globals_dict):
         Hard reset for backend state — stops all remote capture processes,
         clears log queue, and resets internal state.
         """
-        from modules.capture.log_queue import log_queue
+        
         global process_active, packet_count, client
-
         try:
             # Stop any rogue processes on the Pi
             ssh = paramiko.SSHClient()
