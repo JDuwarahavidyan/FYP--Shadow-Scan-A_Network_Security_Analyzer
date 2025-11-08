@@ -118,5 +118,21 @@ export const captureAPI = {
     return eventSource;
   },
 
+  /**
+   * Reset the entire session (frontend + backend)
+   * Calls: POST /api/capture/reset
+   */
+  async resetSession() {
+    const res = await fetch(`${BASE_URL}/api/capture/reset`, {
+      method: "POST",
+    });
+
+    if (!res.ok) throw new Error("Failed to reset session");
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || "Reset failed");
+
+    return data;
+  },
+
 
 };

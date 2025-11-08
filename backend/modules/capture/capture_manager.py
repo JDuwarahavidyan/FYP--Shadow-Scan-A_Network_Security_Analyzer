@@ -94,7 +94,7 @@ def register_routes(app, globals_dict):
             return jsonify({"ok": True, "aps": aps}), 200
 
         except Exception as e:
-            log_queue.put(f"[!] Error fetching AP list: {e}")
+            log_queue.put(f"    [!] Error fetching AP list: {e}")
             return jsonify({"ok": False, "error": str(e)}), 500
 
         finally:
@@ -259,7 +259,7 @@ def register_routes(app, globals_dict):
                 except queue.Empty:
                     # If process not active and log queue empty, break immediately
                     if not process_active and log_queue.empty():
-                        yield f'data: {{"type":"info","message":"🔚 Process finished"}}\n\n'
+                        yield f'data: {{"type":"info","message":"[✓] Process finished"}}\n\n'
                         break
                     continue
 
@@ -270,6 +270,49 @@ def register_routes(app, globals_dict):
         return response
 
 
+    # ============================================================
+    # RESET CAPTURE SESSION
+    # ============================================================
+    @app.route("/api/capture/reset", methods=["POST"])
+    def reset_capture():
+        """
+        Hard reset for backend state — stops all remote capture processes,
+        clears log queue, and resets internal state.
+        """
+        from modules.capture.log_queue import log_queue
+        global process_active, packet_count, client
+
+        try:
+            # Stop any rogue processes on the Pi
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.connect(
+                PI_HOST,
+                username=PI_USER,
+                password=PI_PASS,
+                timeout=10,
+                banner_timeout=20,
+                auth_timeout=20
+            )
+            ssh.exec_command("sudo pkill -f 'wifi_sniff.py' || true; sudo pkill -f 'airodump-ng' || true")
+            ssh.close()
+
+            # Clear backend state
+            process_active = False
+            packet_count = 0
+            client = None
+
+            # Empty log queue
+            while not log_queue.empty():
+                try:
+                    log_queue.get_nowait()
+                except:
+                    break
+
+            return jsonify({"ok": True, "message": "Session fully reset"}), 200
+
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
 
 
     # ============================================================
@@ -291,3 +334,5 @@ def register_routes(app, globals_dict):
             ],
             "topHosts": ["192.168.1.10", "192.168.1.15", "192.168.1.20"]
         }), 200
+        
+        
