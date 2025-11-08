@@ -126,7 +126,7 @@ export function PacketCapturePanel({ onCaptureComplete }) {
     try {
       const result = await captureAPI.stopCapture(sessionId);
       addLog(`[✓] Capture stopped. File saved locally.`);
-      addLog(`[+] Total packets captured: ${result.meta.packetCount}`);
+      // addLog(`[+] Total packets captured: ${result.meta.packetCount}`);
       setPacketCount(result.meta.packetCount);
       setStatus("idle");
       setSessionId(null);
