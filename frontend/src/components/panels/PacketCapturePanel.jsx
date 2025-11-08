@@ -21,11 +21,9 @@ export function PacketCapturePanel({ onCaptureComplete }) {
   // === Helper: Add logs ===
   const addLog = (line, isError = false) => {
     const ts = new Date().toLocaleTimeString();
-    const formattedLine = isError ? `❌ ERROR: ${line}` : line;
+    const formattedLine = isError ? `[✗] ERROR: ${line}` : line;
     setLogs((prev) => [...prev, { ts, line: formattedLine }]);
   };
-
-  
 
   // === Fetch Access Points ===
   const fetchAps = async () => {
@@ -33,14 +31,12 @@ export function PacketCapturePanel({ onCaptureComplete }) {
       setLoadingAps(true);
       setStatus("scanning");
       setLogs([]);
-    
 
       // Close any previous EventSource before starting new one
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      // setLogs([]);
 
       // Start new SSE subscription
       eventSourceRef.current = captureAPI.subscribeLogs(
@@ -75,7 +71,6 @@ export function PacketCapturePanel({ onCaptureComplete }) {
     setStatus("capturing");
     setLogs([]);
     setPacketCount(0);
-    // addDivider("NEW CAPTURE SESSION");
     addLog(`->  Target: ${selectedAp.ssid} (${selectedAp.bssid}) on CH ${selectedAp.channel}`);
     addLog("[/] Initializing packet capture ...");
     addLog("[$] Activating Passive WiFi Sniffer - By Team Shadow-Scan <-");
@@ -89,14 +84,12 @@ export function PacketCapturePanel({ onCaptureComplete }) {
       );
 
       setSessionId(result.sessionId);
-      addLog("[✓] Capture started successfully. Listening for packets...");
 
       // Close any previous EventSource before opening new one
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      // setLogs([]);
 
       // Start log streaming
       eventSourceRef.current = captureAPI.subscribeLogs(
@@ -124,7 +117,7 @@ export function PacketCapturePanel({ onCaptureComplete }) {
     setStatus("stopping");
     addLog("[-] Stopping capture ...");
 
-    //  Close the existing EventSource stream before stopping
+    // Close SSE stream before stopping
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
@@ -143,11 +136,43 @@ export function PacketCapturePanel({ onCaptureComplete }) {
       addLog("[✓] Parse complete.");
 
       if (onCaptureComplete) {
-        onCaptureComplete(result.fileUrl, parsed);  
+        onCaptureComplete(result.fileUrl, parsed);
       }
     } catch (error) {
       setStatus("error");
       addLog(error.message, true);
+    }
+  };
+
+  // === Reset Everything (Frontend + Backend) ===
+  const resetSession = async () => {
+    // Close any open EventSource
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
+    
+
+    try {
+      const data = await captureAPI.resetSession();
+      if (data.ok) {
+        // Reset all local state
+        setStatus("idle");
+        setLogs([]);
+        addLog("[/] Resetting session across system. Please Wait ...");
+        setPacketCount(0);
+        setAps([]);
+        setSelectedAp(null);
+        setSessionId(null);
+        setScannedOnce(false);
+        setDropdownOpen(false);
+        addLog("[✓] System reset complete. Ready for new session.");
+      } else {
+        addLog(`[✗] Backend reset failed: ${data.error}`);
+      }
+    } catch (err) {
+      addLog(`[✗] Error resetting session: ${err.message}`);
     }
   };
 
@@ -177,13 +202,18 @@ export function PacketCapturePanel({ onCaptureComplete }) {
     <div className="space-y-4">
       <Card title="Packet Capture Control" icon={Wifi}>
         <div className="space-y-5">
-          {/* Status & Packet Counter */}
+          {/* Status & Reset Button */}
           <div className="flex items-center justify-between">
             <StatusBadge status={status} />
-            <div className="text-cyan-400 font-mono text-sm">
-              Packets:{" "}
-              <span className="text-white font-bold">{packetCount}</span>
-            </div>
+
+            <button
+              onClick={resetSession}
+              className="px-3 py-1.5 bg-cyan-900/30 hover:bg-cyan-700/40 border border-cyan-500/50 
+                         text-cyan-300 rounded-md font-mono text-xs tracking-wide shadow-[0_0_8px_rgba(0,255,255,0.25)] 
+                         hover:shadow-[0_0_12px_rgba(0,255,255,0.45)] transition-all"
+            >
+               Reset Session
+            </button>
           </div>
 
           {/* Scan Button */}
@@ -202,7 +232,7 @@ export function PacketCapturePanel({ onCaptureComplete }) {
             </button>
           </div>
 
-          {/* Custom Dropdown */}
+          {/* Dropdown for AP Selection */}
           <div className="space-y-2 relative" ref={dropdownRef}>
             <label className="text-sm text-cyan-300 font-mono tracking-wide">
               Select Access Point
