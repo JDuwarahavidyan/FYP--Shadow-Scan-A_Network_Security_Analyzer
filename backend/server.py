@@ -1,12 +1,13 @@
+# server.py
 from flask import Flask
 from flask_cors import CORS
 import threading
 import modules.config as config
 
-# Import from your capture module
-from modules.capture import config
-from modules.capture.log_queue import log_queue
-from modules.capture.capture_manager import register_routes
+# Import Blueprints
+from modules.capture.capture_manager import capture_bp, init_capture_globals
+from modules.analysis.analysis_manager import analysis_bp
+
 
 # ============================================================
 # APP SETUP
@@ -27,10 +28,14 @@ globals_dict = {
     "capture_session": config.capture_session
 }
 
+# Inject shared globals into capture manager
+init_capture_globals(globals_dict)
+
 # ============================================================
-# REGISTER ROUTES
+# REGISTER BLUEPRINTS
 # ============================================================
-register_routes(app, globals_dict)
+app.register_blueprint(capture_bp)
+app.register_blueprint(analysis_bp)
 
 # ============================================================
 # MAIN ENTRY
