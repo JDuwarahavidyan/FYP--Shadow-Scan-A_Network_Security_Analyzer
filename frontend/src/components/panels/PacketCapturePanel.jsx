@@ -4,6 +4,7 @@ import { Card } from "../core/Card";
 import { StatusBadge } from "../core/StatusBadge";
 import { LiveLogTerminal } from "../core/LiveLogTerminal";
 import { captureAPI } from "../../api/captureAPI";
+import { analysisAPI } from "../../api/analysisAPI";
 
 export function PacketCapturePanel({ onCaptureComplete }) {
   const [status, setStatus] = useState("idle");
@@ -132,7 +133,7 @@ export function PacketCapturePanel({ onCaptureComplete }) {
       setSessionId(null);
 
       addLog("[/] Parsing capture file ...");
-      const parsed = await captureAPI.parseCapture(result.fileUrl);
+      const parsed = await analysisAPI.analyze(result.fileUrl);
       addLog("[✓] Parse complete.");
 
       if (onCaptureComplete) {
