@@ -133,8 +133,14 @@ export function PacketCapturePanel({ onCaptureComplete }) {
       setSessionId(null);
 
       addLog("[/] Parsing capture file ...");
-      const parsed = await analysisAPI.analyze(result.fileUrl);
+      const parsed = await analysisAPI.analyze(result.fileUrl, selectedAp?.ssid, selectedAp?.bssid);
       addLog("[✓] Parse complete.");
+      console.log("Sending to analysisAPI:", {
+        fileUrl: result.fileUrl,
+        ssid: selectedAp?.ssid,
+        bssid: selectedAp?.bssid,
+      });
+
 
       if (onCaptureComplete) {
         onCaptureComplete(result.fileUrl, parsed);

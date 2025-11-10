@@ -58,23 +58,6 @@ export const captureAPI = {
   },
 
   /**
-   * Parse capture file for summary
-   * Calls: POST /api/capture/parse
-   */
-  async parseCapture(fileUrl) {
-    const res = await fetch(`${BASE_URL}/api/capture/parse`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fileUrl }),
-    });
-
-    if (!res.ok) throw new Error("Failed to parse capture");
-    const data = await res.json();
-
-    return data;
-  },
-
-  /**
    * Subscribe to live logs (Server-Sent Events)
    * Calls: GET /api/capture/logs
    */

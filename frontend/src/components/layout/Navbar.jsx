@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { Shield } from "lucide-react";
-import { ShieldOff } from 'lucide-react';
 
 export const Navbar = () => {
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
@@ -19,10 +17,10 @@ export const Navbar = () => {
     <nav className="border-b border-cyan-500/30 bg-black/50 backdrop-blur-sm sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <ShieldOff className="w-8 h-8 text-cyan-400" />
+          <img src="/logo.png" alt="Shadow Scan Logo" className="w-12 h-12 object-contain" />
           <div>
-            <h1 className="text-xl font-bold font-mono text-cyan-400">Shadow Scan</h1>
-            <p className="text-xs text-gray-500">Network Security Analyzer</p>
+            <h1 className="text-xl font-bold font-mono text-cyan-400">ShadowScan</h1>
+            <p className="text-xs text-gray-500">See Everything. Reveal Nothing.</p>
           </div>
         </div>
 
