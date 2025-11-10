@@ -273,22 +273,3 @@ def reset_capture():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-# ============================================================
-# MOCK PARSER (Placeholder)
-# ============================================================
-@capture_bp.route("/parse", methods=["POST"])
-def parse_capture():
-    data = request.get_json()
-    file_url = data.get("fileUrl")
-    time.sleep(1)
-    return jsonify({
-        "summary": {
-            "totalPackets": packet_count or 1000,
-            "protocols": {"TCP": 45, "UDP": 30, "ICMP": 15, "Other": 10}
-        },
-        "flows": [
-            {"src": "192.168.1.10", "dst": "8.8.8.8", "protocol": "DNS", "packets": 124},
-            {"src": "192.168.1.15", "dst": "192.168.1.1", "protocol": "HTTP", "packets": 856}
-        ],
-        "topHosts": ["192.168.1.10", "192.168.1.15", "192.168.1.20"]
-    }), 200
