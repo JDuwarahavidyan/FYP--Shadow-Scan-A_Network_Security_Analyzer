@@ -4,7 +4,7 @@ import { Card } from '../core/Card';
 import { LiveLogTerminal } from '../core/LiveLogTerminal';
 import { mockAPI } from '../../api/mockAPI';
 
-export function FingerprintResults({ fileUrl }) {
+export function FingerprintResults({ fileUrl, onDevicesIdentified }) {
   const [loading, setLoading] = useState(false);
   const [devices, setDevices] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -33,6 +33,10 @@ export function FingerprintResults({ fileUrl }) {
         { mac: 'FF:EE:DD:CC:BB:AA', vendor: 'Unknown', fingerprint: 'Linux Device', confidence: 0.65, tags: ['unknown'] }
       ];
       setDevices(mockDevices);
+      // Pass devices to parent component for action identification
+      if (onDevicesIdentified) {
+        onDevicesIdentified(mockDevices);
+      }
       addLog(`Fingerprinting complete! Found ${mockDevices.length} devices.`);
     } catch (err) {
       addLog(`Error: ${err.message}`);

@@ -5,10 +5,12 @@ import { PacketCapturePanel } from "../components/panels/PacketCapturePanel";
 import { MitigationPanel } from "../components/panels/MitigationPanel";
 import { PcapViewer } from "../components/views/PcapViewer";
 import { FingerprintResults } from "../components/views/FingerprintResults";
+import { DeviceActionIdentification } from "../components/views/DeviceActionIdentification";
 
 export default function CyberpunkDashboard() {
   const [captureFile, setCaptureFile] = useState(null);
   const [parsedData, setParsedData] = useState(null);
+  const [fingerprintedDevices, setFingerprintedDevices] = useState([]);
 
   const handleCaptureComplete = (fileUrl, parsed) => {
     setCaptureFile(fileUrl);
@@ -41,7 +43,14 @@ export default function CyberpunkDashboard() {
 
         <div className="space-y-6">
           <PcapViewer fileUrl={captureFile} parsed={parsedData} />
-          <FingerprintResults fileUrl={captureFile} />
+          <FingerprintResults 
+            fileUrl={captureFile} 
+            onDevicesIdentified={setFingerprintedDevices}
+          />
+          <DeviceActionIdentification 
+            fileUrl={captureFile} 
+            devices={fingerprintedDevices}
+          />
           <MitigationPanel onMitigationComplete={handleMitigationComplete} />
         </div>
       </div>

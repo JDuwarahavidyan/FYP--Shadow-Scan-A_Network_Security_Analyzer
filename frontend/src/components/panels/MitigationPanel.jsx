@@ -99,7 +99,7 @@ export function MitigationPanel({ onMitigationComplete }) {
               disabled={status === 'running'}
               className="w-full bg-black/50 border border-cyan-500/30 rounded px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-cyan-500"
             >
-              <option value="reset-arp">ARP Reset</option>
+              <option value="reset-arp">Packet Injection</option>
               <option value="tcp-reset">TCP Reset</option>
               <option value="dns-spoof">DNS Response</option>
               <option value="deauth">WiFi Deauth</option>
