@@ -6,11 +6,13 @@ import { MitigationPanel } from "../components/panels/MitigationPanel";
 import { PcapViewer } from "../components/views/PcapViewer";
 import { FingerprintResults } from "../components/views/FingerprintResults";
 import { DeviceActionIdentification } from "../components/views/DeviceActionIdentification";
+import { UserBehaviourAnalysis } from "../components/views/UserBehaviourAnalysis";
 
 export default function CyberpunkDashboard() {
   const [captureFile, setCaptureFile] = useState(null);
   const [parsedData, setParsedData] = useState(null);
   const [fingerprintedDevices, setFingerprintedDevices] = useState([]);
+  const [activeDevices, setActiveDevices] = useState([]);
 
   const handleCaptureComplete = (fileUrl, parsed) => {
     setCaptureFile(fileUrl);
@@ -50,6 +52,11 @@ export default function CyberpunkDashboard() {
           <DeviceActionIdentification 
             fileUrl={captureFile} 
             devices={fingerprintedDevices}
+            onDeviceActionsIdentified={setActiveDevices}
+          />
+          <UserBehaviourAnalysis 
+            fileUrl={captureFile} 
+            activeDevices={activeDevices}
           />
           <MitigationPanel onMitigationComplete={handleMitigationComplete} />
         </div>

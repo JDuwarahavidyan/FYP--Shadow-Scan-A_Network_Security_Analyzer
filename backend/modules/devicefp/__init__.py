@@ -1,0 +1,1 @@
+# devicefp module initialization

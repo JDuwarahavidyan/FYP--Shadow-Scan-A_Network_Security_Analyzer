@@ -28,9 +28,11 @@ export function FingerprintResults({ fileUrl, onDevicesIdentified }) {
       await new Promise(r => setTimeout(r, 1000));
       addLog('Running ML fingerprint model...');
       const mockDevices = [
-        { mac: 'AA:BB:CC:11:22:33', vendor: 'Apple Inc.', fingerprint: 'iPhone 12', confidence: 0.94, tags: ['mobile', 'iOS'] },
-        { mac: '00:11:22:33:44:55', vendor: 'Samsung', fingerprint: 'Smart TV', confidence: 0.87, tags: ['IoT', 'media'] },
-        { mac: 'FF:EE:DD:CC:BB:AA', vendor: 'Unknown', fingerprint: 'Linux Device', confidence: 0.65, tags: ['unknown'] }
+        { mac: 'c0:f8:53:de:cf:2a', vendor: 'Tuya Smart Inc.', fingerprint: 'Door Sensor', confidence: 0.94, tags: ['IoT'] },
+        { mac: 'c0:f8:53:de:cf:2a', vendor: 'Tuya Smart Inc.', fingerprint: 'Smart Switch', confidence: 0.97, tags: ['IoT'] },
+        { mac: '50:ec:50:94:7b:a3', vendor: 'Beijing Xiaomi Mobile Software Co., Ltd', fingerprint: 'Air Purifier', confidence: 0.87, tags: ['IoT'] },
+        { mac: 'c0:f8:53:de:cf:2a', vendor: 'Tuya Smart Inc.', fingerprint: 'Table Lamp', confidence: 0.97, tags: ['IoT'] },
+        { mac: '5c:4e:ee:ce:f8:3b', vendor: 'AltoBeam Inc.', fingerprint: 'Camera', confidence: 0.65, tags: ['IoT'] }
       ];
       setDevices(mockDevices);
       // Pass devices to parent component for action identification

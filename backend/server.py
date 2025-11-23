@@ -7,6 +7,7 @@ import modules.config as config
 # Import Blueprints
 from modules.capture.capture_manager import capture_bp, init_capture_globals
 from modules.analysis.analysis_manager import analysis_bp
+from modules.devicefp.devicefp_manager import devicefp_bp
 
 
 # ============================================================
@@ -36,6 +37,7 @@ init_capture_globals(globals_dict)
 # ============================================================
 app.register_blueprint(capture_bp)
 app.register_blueprint(analysis_bp)
+app.register_blueprint(devicefp_bp, url_prefix='/api/devicefp')
 
 # ============================================================
 # MAIN ENTRY

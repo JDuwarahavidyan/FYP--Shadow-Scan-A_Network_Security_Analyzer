@@ -1,0 +1,283 @@
+{
+  "analysis_timestamp": "2025-11-23 14:57:57",
+  "file_analyzed": "D:\\University of Ruhuna FoE\\Common Modules\\EE7802 Undergraduate Project\\Shadow-Scan\\backend\\downloads\\capture-01.cap",
+  "router_bssid": "14:eb:b6:be:d7:1e",
+  "total_devices_found": 11,
+  "devices": [
+    {
+      "device_name": "plug",
+      "mac_address": "c0:f8:53:de:cf:2a",
+      "vendor": "Tuya Smart Inc.",
+      "total_packets": 2150,
+      "packet_types": {
+        "data": {
+          "count": 1057,
+          "percentage": 49.16
+        },
+        "management": {
+          "count": 51,
+          "percentage": 2.37
+        },
+        "control": {
+          "count": 1042,
+          "percentage": 48.47
+        }
+      },
+      "first_seen": "2025-11-08 20:56:46",
+      "last_seen": "2025-11-08 20:58:13",
+      "avg_signal_strength": null,
+      "connected_to_router": true,
+      "confidence": 1.0
+    },
+    {
+      "device_name": "switch",
+      "mac_address": "38:2c:e5:1d:02:fb",
+      "vendor": "Tuya Smart Inc.",
+      "total_packets": 1982,
+      "packet_types": {
+        "data": {
+          "count": 1025,
+          "percentage": 51.72
+        },
+        "management": {
+          "count": 0,
+          "percentage": 0.0
+        },
+        "control": {
+          "count": 957,
+          "percentage": 48.28
+        }
+      },
+      "first_seen": "2025-11-08 20:56:46",
+      "last_seen": "2025-11-08 20:58:13",
+      "avg_signal_strength": null,
+      "connected_to_router": true,
+      "confidence": 1.0
+    },
+    {
+      "device_name": "power_strip",
+      "mac_address": "fc:3c:d7:53:f6:79",
+      "vendor": "Tuya Smart Inc.",
+      "total_packets": 1955,
+      "packet_types": {
+        "data": {
+          "count": 1032,
+          "percentage": 52.79
+        },
+        "management": {
+          "count": 0,
+          "percentage": 0.0
+        },
+        "control": {
+          "count": 923,
+          "percentage": 47.21
+        }
+      },
+      "first_seen": "2025-11-08 20:56:46",
+      "last_seen": "2025-11-08 20:58:13",
+      "avg_signal_strength": null,
+      "connected_to_router": true,
+      "confidence": 1.0
+    },
+    {
+      "device_name": "switch1",
+      "mac_address": "38:2c:e5:1c:cf:6e",
+      "vendor": "Tuya Smart Inc.",
+      "total_packets": 1992,
+      "packet_types": {
+        "data": {
+          "count": 1040,
+          "percentage": 52.21
+        },
+        "management": {
+          "count": 0,
+          "percentage": 0.0
+        },
+        "control": {
+          "count": 952,
+          "percentage": 47.79
+        }
+      },
+      "first_seen": "2025-11-08 20:56:46",
+      "last_seen": "2025-11-08 20:58:13",
+      "avg_signal_strength": null,
+      "connected_to_router": true,
+      "confidence": 1.0
+    },
+    {
+      "device_name": "wall_socket",
+      "mac_address": "d8:d6:68:06:6d:65",
+      "vendor": "Tuya Smart Inc.",
+      "total_packets": 1974,
+      "packet_types": {
+        "data": {
+          "count": 1017,
+          "percentage": 51.52
+        },
+        "management": {
+          "count": 0,
+          "percentage": 0.0
+        },
+        "control": {
+          "count": 957,
+          "percentage": 48.48
+        }
+      },
+      "first_seen": "2025-11-08 20:56:46",
+      "last_seen": "2025-11-08 20:58:13",
+      "avg_signal_strength": null,
+      "connected_to_router": true,
+      "confidence": 1.0
+    },
+    {
+      "device_name": "tabel_lamp",
+      "mac_address": "3c:0b:59:8f:25:42",
+      "vendor": "Tuya Smart Inc.",
+      "total_packets": 2117,
+      "packet_types": {
+        "data": {
+          "count": 1088,
+          "percentage": 51.39
+        },
+        "management": {
+          "count": 49,
+          "percentage": 2.31
+        },
+        "control": {
+          "count": 980,
+          "percentage": 46.29
+        }
+      },
+      "first_seen": "2025-11-08 20:56:46",
+      "last_seen": "2025-11-08 20:58:13",
+      "avg_signal_strength": null,
+      "connected_to_router": true,
+      "confidence": 1.0
+    },
+    {
+      "device_name": "baby_cam",
+      "mac_address": "78:8b:2a:9c:80:1e",
+      "vendor": "TP-Link Systems Inc",
+      "total_packets": 1126,
+      "packet_types": {
+        "data": {
+          "count": 602,
+          "percentage": 53.46
+        },
+        "management": {
+          "count": 0,
+          "percentage": 0.0
+        },
+        "control": {
+          "count": 524,
+          "percentage": 46.54
+        }
+      },
+      "first_seen": "2025-11-08 20:56:46",
+      "last_seen": "2025-11-08 20:58:13",
+      "avg_signal_strength": null,
+      "connected_to_router": true,
+      "confidence": 1.0
+    },
+    {
+      "device_name": "camera",
+      "mac_address": "5c:4e:ee:ce:f8:3b",
+      "vendor": "AltoBeam Inc.",
+      "total_packets": 142,
+      "packet_types": {
+        "data": {
+          "count": 62,
+          "percentage": 43.66
+        },
+        "management": {
+          "count": 0,
+          "percentage": 0.0
+        },
+        "control": {
+          "count": 80,
+          "percentage": 56.34
+        }
+      },
+      "first_seen": "2025-11-08 20:56:46",
+      "last_seen": "2025-11-08 20:58:13",
+      "avg_signal_strength": null,
+      "connected_to_router": true,
+      "confidence": 1.0
+    },
+    {
+      "device_name": "motion_sensor1",
+      "mac_address": "f8:17:2d:b4:3d:5a",
+      "vendor": "TP-Link Systems Inc",
+      "total_packets": 790,
+      "packet_types": {
+        "data": {
+          "count": 673,
+          "percentage": 85.19
+        },
+        "management": {
+          "count": 70,
+          "percentage": 8.86
+        },
+        "control": {
+          "count": 47,
+          "percentage": 5.95
+        }
+      },
+      "first_seen": "2025-11-08 20:56:46",
+      "last_seen": "2025-11-08 20:58:13",
+      "avg_signal_strength": null,
+      "connected_to_router": true,
+      "confidence": 1.0
+    },
+    {
+      "device_name": "door_sensor",
+      "mac_address": "18:de:50:54:8e:e9",
+      "vendor": "TP-Link Systems Inc",
+      "total_packets": 990,
+      "packet_types": {
+        "data": {
+          "count": 823,
+          "percentage": 83.13
+        },
+        "management": {
+          "count": 12,
+          "percentage": 1.21
+        },
+        "control": {
+          "count": 155,
+          "percentage": 15.66
+        }
+      },
+      "first_seen": "2025-11-08 20:56:46",
+      "last_seen": "2025-11-08 20:58:13",
+      "avg_signal_strength": null,
+      "connected_to_router": true,
+      "confidence": 1.0
+    },
+    {
+      "device_name": "air_purifier",
+      "mac_address": "50:ec:50:94:7b:a3",
+      "vendor": "Beijing Xiaomi Mobile Software Co., Ltd",
+      "total_packets": 577,
+      "packet_types": {
+        "data": {
+          "count": 244,
+          "percentage": 42.29
+        },
+        "management": {
+          "count": 0,
+          "percentage": 0.0
+        },
+        "control": {
+          "count": 333,
+          "percentage": 57.71
+        }
+      },
+      "first_seen": "2025-11-08 20:56:47",
+      "last_seen": "2025-11-08 20:58:11",
+      "avg_signal_strength": null,
+      "connected_to_router": true,
+      "confidence": 1.0
+    }
+  ]
+}
