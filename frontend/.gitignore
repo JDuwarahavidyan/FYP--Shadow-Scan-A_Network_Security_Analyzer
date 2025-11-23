@@ -1,0 +1,63 @@
+# Python & Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+*.tmp
+*.bak
+*.swp
+
+# Virtual environment folders
+backend/.shadow-venv/
+venv/
+env/
+.venv/
+*.env
+
+# Downloaded or generated data
+backend/downloads/
+backend/__pycache__/
+modules/__pycache__/
+modules/*/__pycache__/
+modules/capture/__pycache__/
+modules/transfer/__pycache__/
+
+# Test or temporary scripts
+test_*.py
+*.test.py
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+
+# Node & Frontend
+
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+frontend/.DS_Store
+frontend/*.log
+
+
+# IDE & Editor Settings
+
+.vscode/
+.idea/
+*.code-workspace
+
+
+# Sensitive files
+
+*.pem
+*.key
+*.crt
+*.config
+secrets.json
+
+
+# Misc cleanup
+
+*.tar.gz
+*.zip
+*.7z
