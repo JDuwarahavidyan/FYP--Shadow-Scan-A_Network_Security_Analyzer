@@ -1,0 +1,68 @@
+[
+    {
+        "device_name": "tabel_lamp",
+        "mac1": "3c:0b:59:8f:25:42",
+        "mac2": "14:eb:b6:be:d7:1e",
+        "label": "tabel_lamp"
+    },
+    {
+        "device_name": "plug",
+        "mac1": "c0:f8:53:de:cf:2a",
+        "mac2": "14:eb:b6:be:d7:1e",
+        "label": "plug"
+    },
+    {
+        "device_name": "wall_socket",
+        "mac1": "d8:d6:68:06:6d:65",
+        "mac2": "14:eb:b6:be:d7:1e",
+        "label": "wall_socket"
+    },
+    {
+        "device_name": "power_strip",
+        "mac1": "fc:3c:d7:53:f6:79",
+        "mac2": "14:eb:b6:be:d7:1e",
+        "label": "power_strip"
+    },
+    {
+        "device_name": "switch",
+        "mac1": "38:2c:e5:1d:02:fb",
+        "mac2": "14:eb:b6:be:d7:1e",
+        "label": "switch"
+    },
+    {
+        "device_name": "switch",
+        "mac1": "38:2c:e5:1c:cf:6e",
+        "mac2": "14:eb:b6:be:d7:1e",
+        "label": "switch"
+    },
+    {
+        "device_name": "baby_cam",
+        "mac1": "78:8b:2a:9c:80:1e",
+        "mac2": "14:eb:b6:be:d7:1e",
+        "label": "baby_cam"
+    },
+    {
+        "device_name": "camera",
+        "mac1": "5c:4e:ee:ce:f8:3b",
+        "mac2": "14:eb:b6:be:d7:1e",
+        "label": "camera"
+    },
+    {
+        "device_name": "motion_sensor",
+        "mac1": "f8:17:2d:b4:3d:5a",
+        "mac2": "14:eb:b6:be:d7:1e",
+        "label": "motion_sensor"
+    },
+    {
+        "device_name": "air_purifier",
+        "mac1": "50:ec:50:94:7b:a3",
+        "mac2": "14:eb:b6:be:d7:1e",
+        "label": "air_purifier"
+    },
+    {
+        "device_name": "door_sensor",
+        "mac1": "18:de:50:54:8e:e9",
+        "mac2": "14:eb:b6:be:d7:1e",
+        "label": "door_sensor"
+    }
+]

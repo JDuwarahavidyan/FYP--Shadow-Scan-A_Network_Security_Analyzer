@@ -3,13 +3,15 @@ const API_BASE_URL = 'http://localhost:5000/api/deviceaction';
 /**
  * Analyze device actions based on fingerprinted devices
  * @param {Array} devices - Array of devices from device fingerprinting
+ * @param {string} bssid - Router BSSID
  * @param {string} pcapFile - Optional path to pcap file (uses latest if not provided)
  * @returns {Promise<Object>} Action analysis results with enriched device data
  */
-export const analyzeDeviceActions = async (devices, pcapFile = null) => {
+export const analyzeDeviceActions = async (devices, bssid, pcapFile = null) => {
   try {
     const requestBody = {
       devices: devices,
+      bssid: bssid,
     };
 
     if (pcapFile) {

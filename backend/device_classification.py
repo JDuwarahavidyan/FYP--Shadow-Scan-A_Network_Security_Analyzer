@@ -168,9 +168,9 @@ def process_pcap_auto(pcap_file, config_json, window_size=1.0, summary_window=0.
 
 
 
-# # Main
+# Main
 
-# if __name__ == "__main__":
-#     config_json = "device_config.json"
-#     pcap_file = "capture-03.cap"
-#     process_pcap_auto(pcap_file, config_json, summary_window=1)
+if __name__ == "__main__":
+    config_json = "device_config.json"
+    pcap_file = "capture-03.cap"
+    process_pcap_auto(pcap_file, config_json, summary_window=1)

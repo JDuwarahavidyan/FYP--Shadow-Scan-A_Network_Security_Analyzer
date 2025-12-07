@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { Activity, Play, Users } from 'lucide-react';
 import { Card } from '../core/Card';
 import { LiveLogTerminal } from '../core/LiveLogTerminal';
-import { mockAPI } from '../../api/mockAPI';
+import { analyzeDeviceActions } from '../../api/deviceActionAPI';
 
-export function DeviceActionIdentification({ fileUrl, devices = [], onDeviceActionsIdentified }) {
+export function DeviceActionIdentification({ fileUrl, devices = [], bssid, onDeviceActionsIdentified }) {
   const [loading, setLoading] = useState(false);
   const [activeDevices, setActiveDevices] = useState([]);
   const [logs, setLogs] = useState([]);

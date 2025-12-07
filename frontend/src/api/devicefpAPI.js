@@ -2,15 +2,19 @@ const API_BASE_URL = 'http://localhost:5000/api/devicefp';
 
 /**
  * Analyze the latest capture file for device fingerprinting
+ * @param {string} bssid - Optional router BSSID (uses default if not provided)
  * @returns {Promise<Object>} Analysis results containing detected devices
  */
-export const analyzeLatestCapture = async () => {
+export const analyzeLatestCapture = async (bssid = null) => {
   try {
+    const requestBody = bssid ? { bssid } : {};
+    
     const response = await fetch(`${API_BASE_URL}/analyze-latest`, {
-      method: 'GET',
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {

@@ -192,6 +192,43 @@ def format_device_name(device_name):
     return formatted_name
 
 
+def generate_device_config(detected_devices, bssid):
+    """
+    Generate device_config.json dynamically based on detected devices and BSSID
+
+    Args:
+        detected_devices: List of devices from fingerprinting
+        bssid: Router BSSID
+
+    Returns:
+        Path to generated config file
+    """
+    config_path = os.path.join(os.getcwd(), "device_config_dynamic.json")
+
+    # Map formatted names back to original names (reverse of format_device_name)
+    def get_original_name(formatted_name):
+        return formatted_name.lower().replace(" ", "_")
+
+    config_data = []
+    for device in detected_devices:
+        original_name = get_original_name(device["device_name"])
+
+        config_entry = {
+            "device_name": original_name,
+            "mac1": device["mac_address"],
+            "mac2": bssid,
+            "label": original_name,
+        }
+        config_data.append(config_entry)
+
+    # Write config file
+    with open(config_path, "w") as f:
+        json.dump(config_data, f, indent=4)
+
+    print(f"[*] Generated dynamic device config at: {config_path}")
+    return config_path
+
+
 def analyze_device_actions(detected_devices, pcap_file, config_json_path):
     """
     Analyze device actions based on detected devices from fingerprinting
@@ -304,6 +341,7 @@ def analyze_actions_endpoint():
     Endpoint to analyze device actions based on fingerprinted devices
     Expects JSON body with:
     - devices: List of detected devices from fingerprinting
+    - bssid: Router BSSID
     - pcap_file: Path to the pcap file (optional, will use latest if not provided)
     """
     try:
@@ -312,7 +350,11 @@ def analyze_actions_endpoint():
         if not data or "devices" not in data:
             return jsonify({"error": "No devices provided"}), 400
 
+        if not data or "bssid" not in data:
+            return jsonify({"error": "No BSSID provided"}), 400
+
         detected_devices = data["devices"]
+        bssid = data["bssid"]
 
         # Determine pcap file path
         if "pcap_file" in data and data["pcap_file"]:
@@ -325,15 +367,19 @@ def analyze_actions_endpoint():
             ]
             if not capture_files:
                 return jsonify({"error": "No capture files found"}), 404
-            pcap_file = os.path.join(downloads_dir, capture_files[0])
 
-        # Config file path
-        config_json = r"D:\University of Ruhuna FoE\Common Modules\EE7802 Undergraduate Project\Shadow-Scan\backend\device_config.json"
+            # Pick the newest file by modification time
+            capture_files_full = [os.path.join(downloads_dir, f) for f in capture_files]
+            pcap_file = max(capture_files_full, key=os.path.getmtime)
+
+        # Generate dynamic config with provided BSSID
+        config_json = generate_device_config(detected_devices, bssid)
 
         if not os.path.exists(config_json):
             return jsonify({"error": "Device configuration file not found"}), 404
 
         print(f"[*] Analyzing device actions for {len(detected_devices)} devices")
+        print(f"[*] Using BSSID: {bssid}")
         print(f"[*] Using pcap file: {pcap_file}")
 
         # Analyze device actions
@@ -354,6 +400,7 @@ def analyze_actions_endpoint():
             "triggered_devices": triggered_count,
             "devices": enriched_devices,
             "pcap_file": pcap_file,
+            "bssid": bssid,
         }
 
         print(
@@ -364,11 +411,3 @@ def analyze_actions_endpoint():
     except Exception as e:
         print(f"[ERROR] Action analysis endpoint failed: {str(e)}")
         return jsonify({"status": "error", "error": str(e)}), 500
-
-
-# # Main
-
-# if __name__ == "__main__":
-#     config_json = "device_config.json"
-#     pcap_file = "capture-03.cap"
-#     process_pcap_auto(pcap_file, config_json, summary_window=1)
