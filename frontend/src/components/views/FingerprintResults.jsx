@@ -64,55 +64,55 @@ export function FingerprintResults({ fileUrl, onDevicesIdentified }) {
     }
   };
 
-  const runTestFingerprint = async () => {
-    setLoading(true);
-    setLogs([]);
-    addLog('Starting TEST device fingerprinting...');
-    try {
-      addLog('Analyzing MAC addresses...');
-      await new Promise(r => setTimeout(r, 500));
-      addLog('Querying vendor database...');
-      await new Promise(r => setTimeout(r, 500));
-      addLog('Processing packet captures...');
+  // const runTestFingerprint = async () => {
+  //   setLoading(true);
+  //   setLogs([]);
+  //   addLog('Starting TEST device fingerprinting...');
+  //   try {
+  //     addLog('Analyzing MAC addresses...');
+  //     await new Promise(r => setTimeout(r, 500));
+  //     addLog('Querying vendor database...');
+  //     await new Promise(r => setTimeout(r, 500));
+  //     addLog('Processing packet captures...');
       
-      // Call real API (same as runFingerprint)
-      const response = await analyzeLatestCapture();
+  //     // Call real API (same as runFingerprint)
+  //     const response = await analyzeLatestCapture();
       
-      addLog(`Router BSSID: ${response.router_bssid}`);
-      addLog(`File analyzed: ${response.file_analyzed}`);
+  //     addLog(`Router BSSID: ${response.router_bssid}`);
+  //     addLog(`File analyzed: ${response.file_analyzed}`);
       
-      // Transform API response to match component format
-      const transformedDevices = response.devices.map(device => ({
-        mac: device.mac_address,
-        vendor: device.vendor,
-        fingerprint: device.device_name,
-        confidence: device.confidence,
-        tags: ['IoT'],
-        totalPackets: device.total_packets,
-        dataPackets: device.packet_types?.data?.count || 0,
-        managementPackets: device.packet_types?.management?.count || 0,
-        controlPackets: device.packet_types?.control?.count || 0,
-        firstSeen: device.first_seen,
-        lastSeen: device.last_seen,
-        avgSignalStrength: device.avg_signal_strength,
-        connectedToRouter: device.connected_to_router
-      }));
+  //     // Transform API response to match component format
+  //     const transformedDevices = response.devices.map(device => ({
+  //       mac: device.mac_address,
+  //       vendor: device.vendor,
+  //       fingerprint: device.device_name,
+  //       confidence: device.confidence,
+  //       tags: ['IoT'],
+  //       totalPackets: device.total_packets,
+  //       dataPackets: device.packet_types?.data?.count || 0,
+  //       managementPackets: device.packet_types?.management?.count || 0,
+  //       controlPackets: device.packet_types?.control?.count || 0,
+  //       firstSeen: device.first_seen,
+  //       lastSeen: device.last_seen,
+  //       avgSignalStrength: device.avg_signal_strength,
+  //       connectedToRouter: device.connected_to_router
+  //     }));
       
-      setDevices(transformedDevices);
+  //     setDevices(transformedDevices);
       
-      // Pass devices to parent component for action identification
-      if (onDevicesIdentified) {
-        onDevicesIdentified(transformedDevices);
-      }
+  //     // Pass devices to parent component for action identification
+  //     if (onDevicesIdentified) {
+  //       onDevicesIdentified(transformedDevices);
+  //     }
       
-      addLog(`TEST Fingerprinting complete! Found ${transformedDevices.length} devices.`);
-    } catch (err) {
-      addLog(`Error: ${err.message}`);
-      console.error('Test fingerprint error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  //     addLog(`TEST Fingerprinting complete! Found ${transformedDevices.length} devices.`);
+  //   } catch (err) {
+  //     addLog(`Error: ${err.message}`);
+  //     console.error('Test fingerprint error:', err);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   return (
     <div className="space-y-4">

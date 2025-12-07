@@ -14,26 +14,25 @@ export function DeviceActionIdentification({ fileUrl, devices = [], onDeviceActi
     setLogs(prev => [...prev, { ts, line }]);
   };
 
-  const runActionAnalysis = async () => {
-    setLoading(true);
-    setLogs([]);
-    addLog('Starting device action identification...');
+  const performActionAnalysis = async (isTest = false) => {
+    const prefix = isTest ? 'TEST: ' : '';
+    addLog(`${prefix}Starting device action identification...`);
     
     try {
       const { jobId } = await mockAPI.startJob('action-analysis', fileUrl);
-      addLog(`Analysis job created: ${jobId}`);
+      addLog(`${prefix}Analysis job created: ${jobId}`);
       
       await new Promise(r => setTimeout(r, 1000));
-      addLog('Analyzing packet timestamps...');
+      addLog(`${prefix}Analyzing packet timestamps...`);
       
       await new Promise(r => setTimeout(r, 1500));
-      addLog('Correlating device activities...');
+      addLog(`${prefix}Correlating device activities...`);
       
       await new Promise(r => setTimeout(r, 1000));
-      addLog('Identifying active communication patterns...');
+      addLog(`${prefix}Identifying active communication patterns...`);
       
       await new Promise(r => setTimeout(r, 800));
-      addLog('Processing traffic flow data...');
+      addLog(`${prefix}Processing traffic flow data...`);
 
       // Mock active devices based on fingerprinted devices or create sample data
       const mockActiveDevices = devices.length > 0 
@@ -117,10 +116,28 @@ export function DeviceActionIdentification({ fileUrl, devices = [], onDeviceActi
       if (onDeviceActionsIdentified) {
         onDeviceActionsIdentified(mockActiveDevices);
       }
-      addLog(`Action analysis complete! Found ${activeCount} active devices out of ${mockActiveDevices.length} total.`);
+      addLog(`${prefix}Action analysis complete! Found ${activeCount} active devices out of ${mockActiveDevices.length} total.`);
       
     } catch (err) {
-      addLog(`Error: ${err.message}`);
+      addLog(`${prefix}Error: ${err.message}`);
+    }
+  };
+
+  const runActionAnalysis = async () => {
+    setLoading(true);
+    setLogs([]);
+    try {
+      await performActionAnalysis(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const runTestActionAnalysis = async () => {
+    setLoading(true);
+    setLogs([]);
+    try {
+      await performActionAnalysis(true);
     } finally {
       setLoading(false);
     }
@@ -186,6 +203,15 @@ export function DeviceActionIdentification({ fileUrl, devices = [], onDeviceActi
           >
             <Play className="w-4 h-4" />
             {loading ? 'Analyzing Actions...' : 'Identify Device Actions'}
+          </button>
+
+          <button
+            onClick={runTestActionAnalysis}
+            disabled={loading}
+            className="w-full px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500 text-yellow-400 rounded font-mono text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            <Play className="w-4 h-4" />
+            {loading ? 'Testing Actions...' : 'Test Identify Device Actions'}
           </button>
 
           {activeDevices.length > 0 && (

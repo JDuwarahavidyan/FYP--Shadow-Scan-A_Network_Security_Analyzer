@@ -8,6 +8,7 @@ import modules.config as config
 from modules.capture.capture_manager import capture_bp, init_capture_globals
 from modules.analysis.analysis_manager import analysis_bp
 from modules.devicefp.devicefp_manager import devicefp_bp
+from modules.deviceaction.deviceaction_manager import deviceaction_bp
 
 
 # ============================================================
@@ -26,7 +27,7 @@ globals_dict = {
     "client": config.client,
     "lock": config.lock,
     "packet_count": config.packet_count,
-    "capture_session": config.capture_session
+    "capture_session": config.capture_session,
 }
 
 # Inject shared globals into capture manager
@@ -37,7 +38,8 @@ init_capture_globals(globals_dict)
 # ============================================================
 app.register_blueprint(capture_bp)
 app.register_blueprint(analysis_bp)
-app.register_blueprint(devicefp_bp, url_prefix='/api/devicefp')
+app.register_blueprint(devicefp_bp, url_prefix="/api/devicefp")
+app.register_blueprint(deviceaction_bp, url_prefix="/api/deviceaction")
 
 # ============================================================
 # MAIN ENTRY
