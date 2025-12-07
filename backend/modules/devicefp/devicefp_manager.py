@@ -11,16 +11,16 @@ devicefp_bp = Blueprint("devicefp", __name__)
 # Device MAC address mapping
 DEVICE_MACS = {
     "plug": "c0:f8:53:de:cf:2a",
-    "plug1": "c0:f8:53:df:18:ea",
+    "plug": "c0:f8:53:df:18:ea",
     "wall_socket": "d8:d6:68:06:6d:65",
     "tabel_lamp": "3c:0b:59:8f:25:42",
     "switch": "38:2c:e5:1d:02:fb",
-    "switch1": "38:2c:e5:1c:cf:6e",
+    "switch": "38:2c:e5:1c:cf:6e",
     "air_purifier": "50:ec:50:94:7b:a3",
     "motion_sensor": "f8:17:2d:b6:38:de",
-    "motion_sensor1": "f8:17:2d:b4:3d:5a",
+    "motion_sensor": "f8:17:2d:b4:3d:5a",
     "door_sensor": "18:de:50:54:8e:e9",
-    "door_sensor1": "18:de:50:50:39:37",
+    "door_sensor": "18:de:50:50:39:37",
     "baby_cam": "78:8b:2a:9c:80:1e",
     "camera": "5c:4e:ee:ce:f8:3b",
     "power_strip": "fc:3c:d7:53:f6:79",
@@ -41,6 +41,15 @@ def normalize_mac(mac):
     return mac
 
 
+def format_device_name(device_name):
+    """Format device name for display - capitalize and replace underscores with spaces"""
+    if not device_name:
+        return "Unknown"
+    # Replace underscores with spaces and capitalize each word
+    formatted_name = device_name.replace("_", " ").title()
+    return formatted_name
+
+
 def get_vendor_from_api(mac_address):
     """Get vendor information from MAC lookup API"""
     try:
@@ -57,27 +66,6 @@ def get_vendor_from_api(mac_address):
     except Exception as e:
         print(f"[WARNING] Failed to lookup vendor for {mac_address}: {e}")
         return None
-
-
-def get_vendor_by_device_type(device_name):
-    """Get vendor information based on device type"""
-    vendor_map = {
-        "plug": "TP-Link",
-        "plug1": "TP-Link",
-        "wall_socket": "Sonoff",
-        "tabel_lamp": "Xiaomi",
-        "switch": "Sonoff",
-        "switch1": "Sonoff",
-        "air_purifier": "Xiaomi",
-        "motion_sensor": "Aqara",
-        "motion_sensor1": "Aqara",
-        "door_sensor": "Aqara",
-        "door_sensor1": "Aqara",
-        "baby_cam": "Xiaomi",
-        "camera": "Yi Technology",
-        "power_strip": "TP-Link",
-    }
-    return vendor_map.get(device_name, "Unknown")
 
 
 def calculate_confidence(stats):
@@ -230,8 +218,6 @@ def analyze_device_fingerprints(file_path):
                                 print(
                                     f"[*] Found vendor for {device_name} ({mac_addr}): {api_vendor}"
                                 )
-                            else:
-                                stats["vendor"] = get_vendor_by_device_type(device_name)
 
         print(f"[*] Processed {processed_packets} packets")
         print(f"[*] Found {router_packets} packets involving router {normalized_bssid}")
@@ -282,7 +268,7 @@ def analyze_device_fingerprints(file_path):
                 )
 
                 device_info = {
-                    "device_name": stats["name"],
+                    "device_name": format_device_name(stats["name"]),
                     "mac_address": stats["mac"],
                     "vendor": stats["vendor"],
                     "total_packets": total_device_packets,
@@ -313,7 +299,6 @@ def analyze_device_fingerprints(file_path):
     except Exception as e:
         print(f"[ERROR] Error analyzing file: {str(e)}")
         raise e
-
 
 
 @devicefp_bp.route("/analyze-latest", methods=["GET"])
@@ -359,6 +344,3 @@ def analyze_latest_capture():
     except Exception as e:
         print(f"[ERROR] Analysis failed: {str(e)}")
         return jsonify({"status": "error", "error": str(e)}), 500
-
-
-
