@@ -1,3 +1,4 @@
+// devicefpAPI.js
 const API_BASE_URL = 'http://localhost:5000/api/devicefp';
 
 /**
@@ -8,7 +9,7 @@ const API_BASE_URL = 'http://localhost:5000/api/devicefp';
 export const analyzeLatestCapture = async (bssid = null) => {
   try {
     const requestBody = bssid ? { bssid } : {};
-    
+
     const response = await fetch(`${API_BASE_URL}/analyze-latest`, {
       method: 'POST',
       headers: {
@@ -18,7 +19,7 @@ export const analyzeLatestCapture = async (bssid = null) => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || 'Failed to analyze capture file');
     }
 
@@ -31,27 +32,87 @@ export const analyzeLatestCapture = async (bssid = null) => {
 };
 
 /**
- * Format device data for display
- * @param {Object} device - Device object from API
- * @returns {Object} Formatted device information
+ * Helper: format raw device type string to user-friendly label
+ * Examples:
+ *  - "switch" -> "Switch"
+ *  - "door_sensor" -> "Door Sensor"
+ *  - "switch_1" -> "Switch" (we strip numeric suffix if present)
  */
-export const formatDeviceInfo = (device) => {
+const formatDeviceTypeString = (raw) => {
+  if (!raw && raw !== '') return '';
+  const s = String(raw || '').trim().toLowerCase();
+
+  if (!s) return '';
+
+  // If looks like "name_N" (e.g. switch_1) strip the trailing number section
+  // but only if it's separated by underscore and last token is a number.
+  const parts = s.split('_');
+  if (parts.length > 1 && /^\d+$/.test(parts[parts.length - 1])) {
+    parts.pop();
+  }
+
+  // If user already supplied a canonical device_type like "switch" use it
+  // Join remaining parts and replace underscores with spaces
+  const joined = parts.join(' ');
+  // Capitalize each word
+  const formatted = joined
+    .split(' ')
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : ''))
+    .join(' ')
+    .trim();
+
+  return formatted || (s.charAt(0).toUpperCase() + s.slice(1));
+};
+
+
+export const formatDeviceInfo = (device = {}) => {
+  // Determine raw type:
+  // Prefer device.device_type (explicit), otherwise extract base from device_name
+  let rawType = '';
+  if (device.device_type && String(device.device_type).trim() !== '') {
+    rawType = String(device.device_type).trim();
+  } else if (device.device_name && String(device.device_name).trim() !== '') {
+    // e.g. "switch_1" -> take "switch"
+    const base = String(device.device_name).trim().split('_')[0];
+    rawType = base;
+  } else {
+    rawType = 'unknown';
+  }
+
+  const formattedType = formatDeviceTypeString(rawType);
+
+  const totalPackets = device.total_packets ?? 0;
+  const dataPackets = device.packet_types?.data?.count ?? 0;
+  const managementPackets = device.packet_types?.management?.count ?? 0;
+  const controlPackets = device.packet_types?.control?.count ?? 0;
+
+  const dataPercentage = device.packet_types?.data?.percentage ?? 0;
+  const managementPercentage = device.packet_types?.management?.percentage ?? 0;
+  const controlPercentage = device.packet_types?.control?.percentage ?? 0;
+
   return {
-    name: device.device_name || 'Unknown Device',
+    name: formattedType,               // friendly name for UI (e.g. "Door Sensor")
+    device_type: formattedType,        
+    device_type_raw: rawType,  
+    device_name: device.device_name,        
     mac: device.mac_address || 'N/A',
     vendor: device.vendor || 'Unknown',
-    totalPackets: device.total_packets || 0,
-    dataPackets: device.packet_types?.data?.count || 0,
-    dataPercentage: device.packet_types?.data?.percentage || 0,
-    managementPackets: device.packet_types?.management?.count || 0,
-    managementPercentage: device.packet_types?.management?.percentage || 0,
-    controlPackets: device.packet_types?.control?.count || 0,
-    controlPercentage: device.packet_types?.control?.percentage || 0,
+    total_packets: totalPackets,
+    totalPackets: totalPackets,
+    dataPackets: dataPackets,
+    managementPackets: managementPackets,
+    controlPackets: controlPackets,
+    dataPercentage: dataPercentage,
+    managementPercentage: managementPercentage,
+    controlPercentage: controlPercentage,
+    // Time / signal
     firstSeen: device.first_seen || 'N/A',
     lastSeen: device.last_seen || 'N/A',
-    avgSignalStrength: device.avg_signal_strength,
-    connectedToRouter: device.connected_to_router || false,
-    confidence: device.confidence || 0,
+    avgSignalStrength: device.avg_signal_strength ?? null,
+    connectedToRouter: !!device.connected_to_router,
+    confidence: typeof device.confidence === 'number' ? device.confidence : 0,
+    // include raw payload for debugging if needed
+    _raw: device,
   };
 };
 
@@ -79,15 +140,15 @@ export const getConfidenceColor = (confidence) => {
 
 /**
  * Filter devices by confidence level
- * @param {Array} devices - Array of device objects
+ * @param {Array} devices - Array of device objects (raw backend objects or formatted ones)
  * @param {string} level - Confidence level ('high', 'medium', 'low', 'all')
- * @returns {Array} Filtered devices
+ * @returns {Array} Filtered devices (raw objects)
  */
 export const filterDevicesByConfidence = (devices, level = 'all') => {
   if (level === 'all') return devices;
 
   return devices.filter((device) => {
-    const confidence = device.confidence || 0;
+    const confidence = (device.confidence ?? device.confidence === 0) ? (device.confidence ?? 0) : (device.confidence ?? 0);
     switch (level.toLowerCase()) {
       case 'high':
         return confidence >= 0.8;
@@ -103,7 +164,7 @@ export const filterDevicesByConfidence = (devices, level = 'all') => {
 
 /**
  * Sort devices by specified field
- * @param {Array} devices - Array of device objects
+ * @param {Array} devices - Array of device objects (raw backend objects or formatted ones)
  * @param {string} field - Field to sort by
  * @param {string} order - Sort order ('asc' or 'desc')
  * @returns {Array} Sorted devices
@@ -120,6 +181,10 @@ export const sortDevices = (devices, field = 'total_packets', order = 'desc') =>
       bValue = parts.reduce((obj, key) => obj?.[key], b);
     }
 
+    // Fallbacks
+    if (aValue === undefined || aValue === null) aValue = 0;
+    if (bValue === undefined || bValue === null) bValue = 0;
+
     if (order === 'asc') {
       return aValue > bValue ? 1 : -1;
     }
@@ -129,6 +194,7 @@ export const sortDevices = (devices, field = 'total_packets', order = 'desc') =>
 
 /**
  * Get device statistics summary
+ * Accepts devices array directly from backend (raw) or formatted objects.
  * @param {Array} devices - Array of device objects
  * @returns {Object} Statistics summary
  */
@@ -145,10 +211,18 @@ export const getDeviceStatistics = (devices) => {
     };
   }
 
-  const totalPackets = devices.reduce((sum, d) => sum + (d.total_packets || 0), 0);
-  const connectedDevices = devices.filter((d) => d.connected_to_router).length;
+  // Support both raw backend objects and formatted objects
+  const totalPackets = devices.reduce((sum, d) => {
+    // prefer backend-style total_packets else totalPackets else 0
+    return sum + (d.total_packets ?? d.totalPackets ?? 0);
+  }, 0);
+
+  const connectedDevices = devices.filter((d) => {
+    return !!(d.connected_to_router ?? d.connectedToRouter);
+  }).length;
+
   const averageConfidence =
-    devices.reduce((sum, d) => sum + (d.confidence || 0), 0) / devices.length;
+    devices.reduce((sum, d) => sum + (d.confidence ?? 0), 0) / devices.length;
 
   return {
     totalDevices: devices.length,

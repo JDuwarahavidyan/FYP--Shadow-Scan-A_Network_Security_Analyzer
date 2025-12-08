@@ -9,6 +9,7 @@ from scapy.all import rdpcap, Dot11
 def extract_features_for_mac_pair(packets, mac1, mac2, label, window_size=1.0):
     pkt_list = []
     t0 = float(packets[0].time)
+    last_pkt_time = None
 
     for pkt in packets:
         if not pkt.haslayer(Dot11):
@@ -18,24 +19,29 @@ def extract_features_for_mac_pair(packets, mac1, mac2, label, window_size=1.0):
         src, dst = dot11.addr2, dot11.addr1
 
         # Device-specific MAC filtering
-        if label == "air_purefier":
+        if label == "air_purifier":
             if ((src, dst) not in [(mac1, mac2), (mac2, mac1)]) and (dst != mac1):
                 continue
         else:
             if (src, dst) not in [(mac1, mac2), (mac2, mac1)]:
                 continue
 
-        if len(pkt_list) > 0:
+        # Calculate inter-arrival time (IAT)
+        if last_pkt_time is not None:
+            iat = float(pkt.time) - last_pkt_time
             last_len = pkt_list[-1]["frame_len"]
-            ref1 = 1 if (len(pkt) == last_len == 10) else 0
+            ref1 = 1 if (len(pkt) == last_len == 10 and iat < 0.001) else 0
         else:
             ref1 = 0
+
+        last_pkt_time = float(pkt.time)
 
         pkt_list.append({
             "time": float(pkt.time) - t0,
             "frame_len": len(pkt),
             "ref": 1 if len(pkt) in [269, 91] else 0,
             "ref1": ref1,
+            "ref2": 1 if len(pkt) in [301, 269, 317] else 0,
             "src_mac": src,
             "dst_mac": dst,
             "retry": 1 if dot11.FCfield & 0x8 else 0
@@ -62,13 +68,15 @@ def extract_features_for_mac_pair(packets, mac1, mac2, label, window_size=1.0):
 
         ref = 1 if any(p["ref"] == 1 for p in window_pkts) else 0
         ref1 = 1 if any(p["ref1"] == 1 for p in window_pkts) else 0
+        ref2 = 1 if any(p["ref2"] == 1 for p in window_pkts) else 0
 
         features.append({
             "label": label,
             "window_start": times[i],
             "window_end": end_time,
             "ref": ref,
-            "ref1": ref1
+            "ref1": ref1,
+            "ref2": ref2
         })
 
     return pd.DataFrame(features)
@@ -82,9 +90,11 @@ def classify_device(device_name, row):
                        "motion_sensor", "door_sensor"]:
         return "triggering" if row.get("ref") == 1 else "not_triggering"
 
-    elif device_name == "air_purefier":
+    elif device_name == "air_purifier":
         return "triggering" if row.get("ref1") == 1 else "not_triggering"
 
+    elif device_name in ["power_strip"]:
+        return "triggering" if row.get("ref2") == 1 else "not_triggering"
     else:
         return "unknown_device"
 
@@ -125,11 +135,12 @@ def process_pcap_auto(pcap_file, config_json, window_size=1.0, summary_window=0.
 
     trigger_sequence = []
 
-    for device, device_df in final_df.groupby("device"):
+    for label, device_df in final_df.groupby("label"):
         max_time = device_df["window_end"].max()
-        best_window = None
-        best_trigger_count = 0
         current_start = 0.0
+
+        best_window = None  # For air_purifier
+        first_window_found = False  # For other devices
 
         while current_start < max_time:
             current_end = current_start + summary_window
@@ -139,21 +150,35 @@ def process_pcap_auto(pcap_file, config_json, window_size=1.0, summary_window=0.
 
             trigger_count = sum(window_df["predicted"] == "triggering")
 
-            if trigger_count > best_trigger_count:
-                best_trigger_count = trigger_count
-                best_window = {
-                    "device": device,
-                    "start": round(float(current_start), 3),
-                    "end": round(float(current_end), 3),
-                    "trigger_count": int(trigger_count)
-                }
+            if trigger_count > 0:
+                # air_purifier → take window with max triggers
+                if label == "air_purifier":
+                    if best_window is None or trigger_count > best_window["trigger_count"]:
+                        best_window = {
+                            "label": label,
+                            "device": device_df["device"].iloc[0],
+                            "start": round(float(current_start), 3),
+                            "end": round(float(current_end), 3),
+                            "trigger_count": int(trigger_count)
+                        }
+                else:
+                    # other devices → take first triggering window only
+                    if not first_window_found:
+                        trigger_sequence.append({
+                            "label": label,
+                            "device": device_df["device"].iloc[0],
+                            "start": round(float(current_start), 3),
+                            "end": round(float(current_end), 3),
+                            "trigger_count": int(trigger_count)
+                        })
+                        first_window_found = True
 
             current_start += summary_window
 
-        if best_window:
+        if label == "air_purifier" and best_window is not None:
             trigger_sequence.append(best_window)
 
-    # Sort by time
+    # Sort by start time
     trigger_sequence = sorted(trigger_sequence, key=lambda x: x["start"])
 
     # Add order number
@@ -172,5 +197,5 @@ def process_pcap_auto(pcap_file, config_json, window_size=1.0, summary_window=0.
 
 if __name__ == "__main__":
     config_json = "device_config.json"
-    pcap_file = "capture-03.cap"
-    process_pcap_auto(pcap_file, config_json, summary_window=1)
+    pcap_file = "capture-07.cap"
+    process_pcap_auto(pcap_file, config_json, summary_window=10)
