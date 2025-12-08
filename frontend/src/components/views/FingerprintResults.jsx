@@ -120,9 +120,15 @@ export function FingerprintResults({ fileUrl, parsedData, onDevicesIdentified })
       setDevices(transformedDevices);
       setBssid(response.router_bssid);
 
+      // Notify parent component of identified devices, BSSID and the file analyzed
       if (onDevicesIdentified) {
-        onDevicesIdentified(transformedDevices, response.router_bssid);
+        onDevicesIdentified(
+          transformedDevices,
+          response.router_bssid,
+          response.file_analyzed
+        );
       }
+
 
       addLog(`Fingerprinting complete! Found ${transformedDevices.length} devices.`);
 

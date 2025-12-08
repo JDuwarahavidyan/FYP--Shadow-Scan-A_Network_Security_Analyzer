@@ -4,19 +4,33 @@ const API_BASE_URL = 'http://localhost:5000/api/deviceaction';
  * Analyze device actions based on fingerprinted devices
  * @param {Array} devices - Array of devices from device fingerprinting
  * @param {string} bssid - Router BSSID
- * @param {string} pcapFile - Optional path to pcap file (uses latest if not provided)
+ * @param {string} pcapFile - Path to pcap file to analyze
  * @returns {Promise<Object>} Action analysis results with enriched device data
  */
-export const analyzeDeviceActions = async (devices, bssid, pcapFile = null) => {
+export const analyzeDeviceActions = async (devices, bssid, pcapFile) => {
   try {
-    const requestBody = {
-      devices: devices,
-      bssid: bssid,
-    };
+    // Transform devices to match backend expectations
+    const transformedDevices = devices.map(device => ({
+      mac_address: device.mac,
+      vendor: device.vendor,
+      device_type: device.raw_type || device.device_type,
+      device_name: device.device_name,
+      confidence: device.confidence,
+      total_packets: device.totalPackets,
+      packet_types: {
+        data: { count: device.dataPackets || 0 },
+        management: { count: device.managementPackets || 0 },
+        control: { count: device.controlPackets || 0 }
+      },
+      avg_signal_strength: device.avgSignalStrength,
+      connected_to_router: device.connectedToRouter
+    }));
 
-    if (pcapFile) {
-      requestBody.pcap_file = pcapFile;
-    }
+    const requestBody = {
+      devices: transformedDevices,
+      bssid: bssid,
+      pcap_file: pcapFile
+    };
 
     const response = await fetch(`${API_BASE_URL}/analyze-actions`, {
       method: 'POST',

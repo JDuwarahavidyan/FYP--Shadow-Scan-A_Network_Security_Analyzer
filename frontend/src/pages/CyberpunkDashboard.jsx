@@ -14,10 +14,12 @@ export default function CyberpunkDashboard() {
   const [fingerprintedDevices, setFingerprintedDevices] = useState([]);
   const [activeDevices, setActiveDevices] = useState([]);
   const [bssid, setBssid] = useState(null);
+  const [pcapFile, setPcapFile] = useState(null);
 
-  const handleDevicesIdentified = (devices, detectedBssid) => {
+  const handleDevicesIdentified = (devices, detectedBssid, analyzedFile) => {
     setFingerprintedDevices(devices);
     setBssid(detectedBssid);
+    setPcapFile(analyzedFile);
   };
 
   const handleCaptureComplete = (fileUrl, parsed) => {
@@ -60,6 +62,7 @@ export default function CyberpunkDashboard() {
             fileUrl={captureFile} 
             devices={fingerprintedDevices}
             bssid={bssid}
+            pcapFile={pcapFile}
             onDeviceActionsIdentified={setActiveDevices}
           />
           <UserBehaviourAnalysis 
