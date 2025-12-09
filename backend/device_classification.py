@@ -11,6 +11,13 @@ def extract_features_for_mac_pair(packets, mac1, mac2, label, window_size=1.0):
     t0 = float(packets[0].time)
     last_pkt_time = None
 
+    # Define pattern: 24,10 repeated 5 times
+    PATTERN = [24, 10] * 5
+    PATTERN_LEN = len(PATTERN)
+
+    # Temporary list to store lengths to detect consecutive pattern
+    length_buffer = []
+
     for pkt in packets:
         if not pkt.haslayer(Dot11):
             continue
@@ -26,27 +33,45 @@ def extract_features_for_mac_pair(packets, mac1, mac2, label, window_size=1.0):
             if (src, dst) not in [(mac1, mac2), (mac2, mac1)]:
                 continue
 
-        # Calculate inter-arrival time (IAT)
-        if last_pkt_time is not None:
-            iat = float(pkt.time) - last_pkt_time
-            last_len = pkt_list[-1]["frame_len"]
-            ref1 = 1 if (len(pkt) == last_len == 10 and iat < 0.001) else 0
-        else:
-            ref1 = 0
+        frame_len = len(pkt)
 
+        # Push frame length into buffer
+        length_buffer.append(frame_len)
+        if len(length_buffer) > PATTERN_LEN:
+            length_buffer.pop(0)
+
+        # Check pattern match → ref1 = 1
+        pattern_match = (length_buffer == PATTERN)
+
+        # OLD ref1 rule replaced with NEW pattern logic
+        ref1 = 1 if pattern_match else 0
+
+        # ref rule (unchanged)
+        ref = 1 if frame_len in [269, 91] else 0
+
+        # ref2 rule (unchanged)
+        ref2 = 1 if frame_len in [301, 269, 317] else 0
+
+        # retry flag
+        retry_flag = 1 if dot11.FCfield & 0x8 else 0
+
+        # Inter-arrival time (still computed)
+        if last_pkt_time is not None:
+            _ = float(pkt.time) - last_pkt_time
         last_pkt_time = float(pkt.time)
 
         pkt_list.append({
             "time": float(pkt.time) - t0,
-            "frame_len": len(pkt),
-            "ref": 1 if len(pkt) in [269, 91] else 0,
+            "frame_len": frame_len,
+            "ref": ref,
             "ref1": ref1,
-            "ref2": 1 if len(pkt) in [301, 269, 317] else 0,
+            "ref2": ref2,
             "src_mac": src,
             "dst_mac": dst,
-            "retry": 1 if dot11.FCfield & 0x8 else 0
+            "retry": retry_flag
         })
 
+    # No packets → return empty
     if not pkt_list:
         return pd.DataFrame()
 
@@ -80,7 +105,6 @@ def extract_features_for_mac_pair(packets, mac1, mac2, label, window_size=1.0):
         })
 
     return pd.DataFrame(features)
-
 
 
 # Classification Rules
