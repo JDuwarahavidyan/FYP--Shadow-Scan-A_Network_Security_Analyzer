@@ -1,7 +1,5 @@
-# device_action_bp.py
 from flask import Blueprint, request, jsonify
 import os
-import json
 import time
 from scapy.all import rdpcap, Dot11
 import pandas as pd
@@ -11,11 +9,7 @@ import re
 
 deviceaction_bp = Blueprint("deviceaction", __name__)
 
-# -------------------------
-# Updated feature extraction (matches the standalone script logic)
-# - Adds ref2
-# - Uses label (device_type normalized) for device-specific MAC filtering
-# -------------------------
+
 def extract_features_for_mac_pair(packets, mac1, mac2, label, window_size=1.0):
     pkt_list = []
     if not packets:
@@ -30,8 +24,6 @@ def extract_features_for_mac_pair(packets, mac1, mac2, label, window_size=1.0):
         dot11 = pkt[Dot11]
         src, dst = dot11.addr2, dot11.addr1
 
-        # Device-specific MAC filtering (match standalone script)
-        # Note: label is expected to be the normalized device_type (e.g. "air_purifier")
         if label == "air_purifier":
             if ((src, dst) not in [(mac1, mac2), (mac2, mac1)]) and (dst != mac1):
                 continue
@@ -39,27 +31,27 @@ def extract_features_for_mac_pair(packets, mac1, mac2, label, window_size=1.0):
             if (src, dst) not in [(mac1, mac2), (mac2, mac1)]:
                 continue
 
-        # Calculate inter-arrival time (IAT) for ref1
         if last_pkt_time is not None:
             iat = float(pkt.time) - last_pkt_time
             last_len = pkt_list[-1]["frame_len"]
-            # original standalone used a very tight iat < 0.001 combined check for ref1
             ref1 = 1 if (len(pkt) == last_len == 10 and iat < 0.001) else 0
         else:
             ref1 = 0
 
         last_pkt_time = float(pkt.time)
 
-        pkt_list.append({
-            "time": float(pkt.time) - t0,
-            "frame_len": len(pkt),
-            "ref": 1 if len(pkt) in [269, 91] else 0,
-            "ref1": ref1,
-            "ref2": 1 if len(pkt) in [301, 269, 317] else 0,
-            "src_mac": src,
-            "dst_mac": dst,
-            "retry": 1 if dot11.FCfield & 0x8 else 0
-        })
+        pkt_list.append(
+            {
+                "time": float(pkt.time) - t0,
+                "frame_len": len(pkt),
+                "ref": 1 if len(pkt) in [269, 91] else 0,
+                "ref1": ref1,
+                "ref2": 1 if len(pkt) in [301, 269, 317] else 0,
+                "src_mac": src,
+                "dst_mac": dst,
+                "retry": 1 if dot11.FCfield & 0x8 else 0,
+            }
+        )
 
     if not pkt_list:
         return pd.DataFrame()
@@ -84,28 +76,29 @@ def extract_features_for_mac_pair(packets, mac1, mac2, label, window_size=1.0):
         ref1 = 1 if any(p["ref1"] == 1 for p in window_pkts) else 0
         ref2 = 1 if any(p["ref2"] == 1 for p in window_pkts) else 0
 
-        features.append({
-            "label": label,
-            "window_start": times[i],
-            "window_end": end_time,
-            "ref": ref,
-            "ref1": ref1,
-            "ref2": ref2
-        })
+        features.append(
+            {
+                "label": label,
+                "window_start": times[i],
+                "window_end": end_time,
+                "ref": ref,
+                "ref1": ref1,
+                "ref2": ref2,
+            }
+        )
 
     return pd.DataFrame(features)
 
 
-# -------------------------
-# Updated classification to match new script:
-# - uses ref for many devices
-# - ref1 for air_purifier
-# - ref2 for power_strip
-# -------------------------
 def classify_device(device_name, row):
-    # device_name here is the normalized device_type (e.g. "switch", "air_purifier", "power_strip")
-    if device_name in ["plug", "wall_plug", "tabel_lamp", "switch",
-                       "motion_sensor", "door_sensor"]:
+    if device_name in [
+        "plug",
+        "wall_plug",
+        "tabel_lamp",
+        "switch",
+        "motion_sensor",
+        "door_sensor",
+    ]:
         return "triggering" if row.get("ref") == 1 else "not_triggering"
 
     elif device_name == "air_purifier":
@@ -118,9 +111,6 @@ def classify_device(device_name, row):
         return "unknown_device"
 
 
-# -------------------------
-# Helpers (unchanged except small additions)
-# -------------------------
 def normalize_mac(mac):
     if not mac:
         return None
@@ -138,15 +128,9 @@ def normalize_label(name_raw):
 
 
 def format_device_name_for_output(name_raw):
-    """
-    Format device name for output:
-    - replace underscores with spaces
-    - capitalize each word
-    """
     if not name_raw:
         return ""
-    s = str(name_raw).strip()
-    s = s.replace("_", " ")
+    s = str(name_raw).strip().replace("_", " ")
     return " ".join(part.capitalize() for part in s.split())
 
 
@@ -180,7 +164,9 @@ def detect_traffic_type_from_counts(packet_types):
     return "Unknown"
 
 
-def calculate_prediction_confidence(trigger_count, total_windows, data_packet_ratio, total_packets):
+def calculate_prediction_confidence(
+    trigger_count, total_windows, data_packet_ratio, total_packets
+):
     if total_windows and total_windows > 0:
         trigger_density = trigger_count / float(total_windows)
         trigger_density = max(0.0, min(1.0, trigger_density))
@@ -212,15 +198,16 @@ def calculate_prediction_confidence(trigger_count, total_windows, data_packet_ra
     return round(score, 3)
 
 
-# -------------------------
-# Action detection (unchanged)
-# -------------------------
-def detect_actions_for_device(frontend_info, device_df, filtered_packets, mac, router_mac, summary_window=1.0):
+def detect_actions_for_device(
+    frontend_info, device_df, filtered_packets, mac, router_mac, summary_window=1.0
+):
     actions = []
     if not mac:
         return actions
 
-    packet_types = frontend_info.get("packet_types") or frontend_info.get("packetTypes") or None
+    packet_types = (
+        frontend_info.get("packet_types") or frontend_info.get("packetTypes") or None
+    )
     data_count = mgmt_count = ctrl_count = 0
     total_count = 0
 
@@ -255,7 +242,6 @@ def detect_actions_for_device(frontend_info, device_df, filtered_packets, mac, r
     ctrl_ratio = (ctrl_count / total_count) if total_count > 0 else 0.0
     total_packets = total_count
 
-    avg_frame_len = None
     pkt_times = []
     frame_lens = []
     for pkt in filtered_packets:
@@ -270,12 +256,11 @@ def detect_actions_for_device(frontend_info, device_df, filtered_packets, mac, r
             continue
         pkt_times.append(float(pkt.time))
         frame_lens.append(len(pkt))
-    if frame_lens:
-        avg_frame_len = float(sum(frame_lens)) / len(frame_lens)
 
+    avg_frame_len = float(sum(frame_lens)) / len(frame_lens) if frame_lens else None
     pkt_rate = 0.0
-    if pkt_times:
-        duration = max(pkt_times) - min(pkt_times) if len(pkt_times) > 1 else 0.0
+    if pkt_times and len(pkt_times) > 1:
+        duration = max(pkt_times) - min(pkt_times)
         if duration > 0:
             pkt_rate = len(pkt_times) / duration
 
@@ -283,53 +268,71 @@ def detect_actions_for_device(frontend_info, device_df, filtered_packets, mac, r
     triggering_windows = 0
     if device_df is not None and not device_df.empty:
         max_time = device_df["window_end"].max()
-        total_windows = int(math.ceil(max_time / summary_window)) if max_time and summary_window > 0 else 0
-        triggering_windows = int(sum(device_df.get("ref", 0) == 1) + sum(device_df.get("ref1", 0) == 1)) if total_windows > 0 else 0
+        total_windows = (
+            int(math.ceil(max_time / summary_window))
+            if max_time and summary_window > 0
+            else 0
+        )
+        triggering_windows = (
+            int(sum(device_df.get("ref", 0) == 1) + sum(device_df.get("ref1", 0) == 1))
+            if total_windows > 0
+            else 0
+        )
 
     def norm01(x, mn, mx):
-        try:
-            if mx <= mn:
-                return 0.0
-            return max(0.0, min(1.0, (x - mn) / float(mx - mn)))
-        except Exception:
+        if mx <= mn:
             return 0.0
+        return max(0.0, min(1.0, (x - mn) / float(mx - mn)))
 
-    # Candidate actions (same as before)...
     if data_ratio > 0.7 and pkt_rate > 1.0 and avg_frame_len and avg_frame_len > 400:
-        conf = 0.6 * norm01(data_ratio, 0.7, 1.0) + 0.3 * norm01(pkt_rate, 1.0, 10.0) + 0.1 * norm01(avg_frame_len, 400, 1500)
-        actions.append({
-            "action": "High Data / Streaming",
-            "confidence": round(max(0.0, min(1.0, conf)), 3),
-            "evidence": {
-                "data_ratio": round(data_ratio, 3),
-                "avg_frame_len": round(avg_frame_len, 1) if avg_frame_len else None,
-                "pkt_rate": round(pkt_rate, 2),
-                "total_packets": int(total_packets)
+        conf = (
+            0.6 * norm01(data_ratio, 0.7, 1.0)
+            + 0.3 * norm01(pkt_rate, 1.0, 10.0)
+            + 0.1 * norm01(avg_frame_len, 400, 1500)
+        )
+        actions.append(
+            {
+                "action": "High Data / Streaming",
+                "confidence": round(max(0.0, min(1.0, conf)), 3),
+                "evidence": {
+                    "data_ratio": round(data_ratio, 3),
+                    "avg_frame_len": round(avg_frame_len, 1) if avg_frame_len else None,
+                    "pkt_rate": round(pkt_rate, 2),
+                    "total_packets": int(total_packets),
+                },
             }
-        })
+        )
 
     if data_ratio > 0.3 and total_packets > 20:
-        conf = 0.5 * norm01(data_ratio, 0.3, 0.7) + 0.3 * norm01(total_packets, 20, 500) + 0.2 * norm01(avg_frame_len or 0, 80, 1000)
-        actions.append({
-            "action": "Data Transmission",
-            "confidence": round(max(0.0, min(1.0, conf)), 3),
-            "evidence": {
-                "data_ratio": round(data_ratio, 3),
-                "total_packets": int(total_packets),
-                "avg_frame_len": round(avg_frame_len, 1) if avg_frame_len else None
+        conf = (
+            0.5 * norm01(data_ratio, 0.3, 0.7)
+            + 0.3 * norm01(total_packets, 20, 500)
+            + 0.2 * norm01(avg_frame_len or 0, 80, 1000)
+        )
+        actions.append(
+            {
+                "action": "Data Transmission",
+                "confidence": round(max(0.0, min(1.0, conf)), 3),
+                "evidence": {
+                    "data_ratio": round(data_ratio, 3),
+                    "total_packets": int(total_packets),
+                    "avg_frame_len": round(avg_frame_len, 1) if avg_frame_len else None,
+                },
             }
-        })
+        )
 
     if mgmt_ratio > 0.6 or (mgmt_ratio > 0.3 and total_packets < 50):
         conf = 0.6 * norm01(mgmt_ratio, 0.3, 1.0) + 0.4 * norm01(total_packets, 0, 200)
-        actions.append({
-            "action": "Management Packets / Beaconing",
-            "confidence": round(max(0.0, min(1.0, conf)), 3),
-            "evidence": {
-                "management_ratio": round(mgmt_ratio, 3),
-                "total_packets": int(total_packets)
+        actions.append(
+            {
+                "action": "Management Packets / Beaconing",
+                "confidence": round(max(0.0, min(1.0, conf)), 3),
+                "evidence": {
+                    "management_ratio": round(mgmt_ratio, 3),
+                    "total_packets": int(total_packets),
+                },
             }
-        })
+        )
 
     probe_count = 0
     for pkt in filtered_packets:
@@ -349,11 +352,13 @@ def detect_actions_for_device(frontend_info, device_df, filtered_packets, mac, r
             pass
     if probe_count > 5:
         conf = min(1.0, probe_count / 50.0 + 0.3)
-        actions.append({
-            "action": "Probe / Scanning",
-            "confidence": round(conf, 3),
-            "evidence": {"probe_count": int(probe_count)}
-        })
+        actions.append(
+            {
+                "action": "Probe / Scanning",
+                "confidence": round(conf, 3),
+                "evidence": {"probe_count": int(probe_count)},
+            }
+        )
 
     assoc_count = 0
     auth_count = 0
@@ -376,83 +381,128 @@ def detect_actions_for_device(frontend_info, device_df, filtered_packets, mac, r
             pass
     if assoc_count + auth_count > 2:
         conf = min(1.0, (assoc_count + auth_count) / 10.0 + 0.4)
-        actions.append({
-            "action": "Association / Authentication (Pairing)",
-            "confidence": round(conf, 3),
-            "evidence": {"assoc_count": int(assoc_count), "auth_count": int(auth_count)}
-        })
-
-    # prepare small_frames / small_ratio (use frame_lens above)
-    frame_lens = []
-    for pkt in filtered_packets:
-        if not pkt.haslayer(Dot11):
-            continue
-        dot11 = pkt[Dot11]
-        a1 = normalize_mac(dot11.addr1) if dot11.addr1 else None
-        a2 = normalize_mac(dot11.addr2) if dot11.addr2 else None
-        a3 = normalize_mac(dot11.addr3) if dot11.addr3 else None
-        addrs = {a for a in (a1, a2, a3) if a}
-        if mac not in addrs:
-            continue
-        frame_lens.append(len(pkt))
+        actions.append(
+            {
+                "action": "Association / Authentication (Pairing)",
+                "confidence": round(conf, 3),
+                "evidence": {
+                    "assoc_count": int(assoc_count),
+                    "auth_count": int(auth_count),
+                },
+            }
+        )
 
     small_frames = sum(1 for l in frame_lens if l < 60) if frame_lens else 0
     small_ratio = (small_frames / len(frame_lens)) if frame_lens else 0.0
     if small_ratio > 0.5 and total_packets > 10 and data_ratio < 0.2:
-        conf = 0.6 * norm01(small_ratio, 0.5, 1.0) + 0.4 * norm01(total_packets, 10, 200)
-        actions.append({
-            "action": "Keep-Alive / Heartbeat",
-            "confidence": round(max(0.0, min(1.0, conf)), 3),
-            "evidence": {"small_frame_ratio": round(small_ratio, 3), "total_packets": int(total_packets)}
-        })
+        conf = 0.6 * norm01(small_ratio, 0.5, 1.0) + 0.4 * norm01(
+            total_packets, 10, 200
+        )
+        actions.append(
+            {
+                "action": "Keep-Alive / Heartbeat",
+                "confidence": round(max(0.0, min(1.0, conf)), 3),
+                "evidence": {
+                    "small_frame_ratio": round(small_ratio, 3),
+                    "total_packets": int(total_packets),
+                },
+            }
+        )
 
     if ctrl_ratio > 0.25:
         conf = min(1.0, ctrl_ratio * 1.2)
-        actions.append({
-            "action": "Control Frames (ACK / RTS / CTS)",
-            "confidence": round(conf, 3),
-            "evidence": {"control_ratio": round(ctrl_ratio, 3), "total_packets": int(total_packets)}
-        })
+        actions.append(
+            {
+                "action": "Control Frames (ACK / RTS / CTS)",
+                "confidence": round(conf, 3),
+                "evidence": {
+                    "control_ratio": round(ctrl_ratio, 3),
+                    "total_packets": int(total_packets),
+                },
+            }
+        )
 
     large_frames = sum(1 for l in frame_lens if l > 1000) if frame_lens else 0
     if data_ratio > 0.6 and large_frames > 50:
         conf = min(1.0, 0.4 + norm01(large_frames, 50, 500))
-        actions.append({
-            "action": "Firmware / OTA (possible)",
-            "confidence": round(conf, 3),
-            "evidence": {"large_frames": int(large_frames), "data_ratio": round(data_ratio, 3)}
-        })
+        actions.append(
+            {
+                "action": "Firmware / OTA (possible)",
+                "confidence": round(conf, 3),
+                "evidence": {
+                    "large_frames": int(large_frames),
+                    "data_ratio": round(data_ratio, 3),
+                },
+            }
+        )
 
-    vendor = (frontend_info.get("vendor") or frontend_info.get("manufacturer") or "").lower() if frontend_info else ""
-    is_camera_vendor = any(k in vendor for k in ["camera", "hikvision", "dahua", "mi", "xiaomi", "zheng", "zyxel", "alibeam", "alobeam", "zheng"])
-    if data_ratio > 0.6 and pkt_rate > 0.5 and (is_camera_vendor or avg_frame_len and avg_frame_len > 400):
-        conf = 0.5 * norm01(data_ratio, 0.6, 1.0) + 0.3 * norm01(pkt_rate, 0.5, 10.0) + 0.2 * (0.9 if is_camera_vendor else 0.3)
-        actions.append({
-            "action": "Camera Streaming (possible)",
-            "confidence": round(max(0.0, min(1.0, conf)), 3),
-            "evidence": {"data_ratio": round(data_ratio, 3), "pkt_rate": round(pkt_rate, 2), "vendor": frontend_info.get("vendor")}
-        })
+    vendor = (
+        (frontend_info.get("vendor") or frontend_info.get("manufacturer") or "").lower()
+        if frontend_info
+        else ""
+    )
+    is_camera_vendor = any(
+        k in vendor
+        for k in [
+            "camera",
+            "hikvision",
+            "dahua",
+            "mi",
+            "xiaomi",
+            "zheng",
+            "zyxel",
+            "alibeam",
+            "alobeam",
+            "zheng",
+        ]
+    )
+    if (
+        data_ratio > 0.6
+        and pkt_rate > 0.5
+        and (is_camera_vendor or avg_frame_len and avg_frame_len > 400)
+    ):
+        conf = (
+            0.5 * norm01(data_ratio, 0.6, 1.0)
+            + 0.3 * norm01(pkt_rate, 0.5, 10.0)
+            + 0.2 * (0.9 if is_camera_vendor else 0.3)
+        )
+        actions.append(
+            {
+                "action": "Camera Streaming (possible)",
+                "confidence": round(max(0.0, min(1.0, conf)), 3),
+                "evidence": {
+                    "data_ratio": round(data_ratio, 3),
+                    "pkt_rate": round(pkt_rate, 2),
+                    "vendor": frontend_info.get("vendor"),
+                },
+            }
+        )
 
-    mcast_count = 0
-    for pkt in filtered_packets:
-        if not pkt.haslayer(Dot11):
-            continue
-        dot11 = pkt[Dot11]
-        dst = normalize_mac(dot11.addr1) if dot11.addr1 else None
-        if dst and (dst.startswith("ff:ff:ff") or dst.startswith("33:33")):
-            a1 = normalize_mac(dot11.addr1) if dot11.addr1 else None
-            a2 = normalize_mac(dot11.addr2) if dot11.addr2 else None
-            a3 = normalize_mac(dot11.addr3) if dot11.addr3 else None
-            addrs = {a for a in (a1, a2, a3) if a}
-            if mac in addrs:
-                mcast_count += 1
+    mcast_count = sum(
+        1
+        for pkt in filtered_packets
+        if pkt.haslayer(Dot11)
+        and normalize_mac(pkt[Dot11].addr1)
+        and (
+            normalize_mac(pkt[Dot11].addr1).startswith("ff:ff:ff")
+            or normalize_mac(pkt[Dot11].addr1).startswith("33:33")
+        )
+        and mac
+        in {
+            normalize_mac(pkt[Dot11].addr1),
+            normalize_mac(pkt[Dot11].addr2),
+            normalize_mac(pkt[Dot11].addr3),
+        }
+    )
     if mcast_count > 5:
         conf = min(1.0, 0.3 + norm01(mcast_count, 5, 200))
-        actions.append({
-            "action": "ARP / Local Discovery (possible)",
-            "confidence": round(conf, 3),
-            "evidence": {"mcast_count": int(mcast_count)}
-        })
+        actions.append(
+            {
+                "action": "ARP / Local Discovery (possible)",
+                "confidence": round(conf, 3),
+                "evidence": {"mcast_count": int(mcast_count)},
+            }
+        )
 
     actuation_windows = 0
     if device_df is not None and not device_df.empty:
@@ -461,86 +511,107 @@ def detect_actions_for_device(frontend_info, device_df, filtered_packets, mac, r
                 actuation_windows += 1
     if actuation_windows > 0 and (total_packets < 200 or data_ratio < 0.2):
         conf = min(1.0, 0.3 + norm01(actuation_windows, 1, 10))
-        actions.append({
-            "action": "Power Toggle / Actuation",
-            "confidence": round(conf, 3),
-            "evidence": {"actuation_windows": int(actuation_windows), "total_packets": int(total_packets)}
-        })
+        actions.append(
+            {
+                "action": "Power Toggle / Actuation",
+                "confidence": round(conf, 3),
+                "evidence": {
+                    "actuation_windows": int(actuation_windows),
+                    "total_packets": int(total_packets),
+                },
+            }
+        )
 
     spike_detected = False
     if device_df is not None and not device_df.empty:
-        try:
-            counts = []
-            for _, r in device_df.iterrows():
-                counts.append(1 if (r.get("ref") == 1 or r.get("ref1") == 1) else 0)
-            if counts and max(counts) > 0 and sum(counts) >= 1:
-                spike_detected = True
-        except Exception:
-            spike_detected = False
+        counts = [
+            (r.get("ref") == 1 or r.get("ref1") == 1) for _, r in device_df.iterrows()
+        ]
+        spike_detected = any(counts)
     if spike_detected and (total_packets < 300):
         conf = 0.5
-        actions.append({
-            "action": "Motion Trigger (for sensors)",
-            "confidence": round(conf, 3),
-            "evidence": {"spike_detected": True, "total_packets": int(total_packets)}
-        })
+        actions.append(
+            {
+                "action": "Motion Trigger (for sensors)",
+                "confidence": round(conf, 3),
+                "evidence": {
+                    "spike_detected": True,
+                    "total_packets": int(total_packets),
+                },
+            }
+        )
 
     if total_packets < 10 and data_ratio < 0.2:
         conf = min(1.0, 0.8 - 0.05 * total_packets)
-        actions.append({
-            "action": "Idle / Low Activity",
-            "confidence": round(conf, 3),
-            "evidence": {"total_packets": int(total_packets)}
-        })
+        actions.append(
+            {
+                "action": "Idle / Low Activity",
+                "confidence": round(conf, 3),
+                "evidence": {"total_packets": int(total_packets)},
+            }
+        )
 
-    if (data_ratio > 0.15 and mgmt_ratio > 0.15 and ctrl_ratio > 0.05) or (data_ratio > 0.2 and mgmt_ratio > 0.2):
+    if (data_ratio > 0.15 and mgmt_ratio > 0.15 and ctrl_ratio > 0.05) or (
+        data_ratio > 0.2 and mgmt_ratio > 0.2
+    ):
         conf = min(1.0, 0.4 + 0.5 * (data_ratio + mgmt_ratio))
-        actions.append({
-            "action": "Mixed Activity",
-            "confidence": round(conf, 3),
-            "evidence": {"data_ratio": round(data_ratio, 3), "management_ratio": round(mgmt_ratio, 3), "control_ratio": round(ctrl_ratio, 3)}
-        })
+        actions.append(
+            {
+                "action": "Mixed Activity",
+                "confidence": round(conf, 3),
+                "evidence": {
+                    "data_ratio": round(data_ratio, 3),
+                    "management_ratio": round(mgmt_ratio, 3),
+                    "control_ratio": round(ctrl_ratio, 3),
+                },
+            }
+        )
 
     actions = sorted(actions, key=lambda x: x.get("confidence", 0), reverse=True)
     return actions
 
 
-# -------------------------
-# Main processing: accept devices list from frontend
-# - New windowing logic: group by label and follow the standalone script semantics:
-#   * For non-air_purifier labels: take the first triggering window
-#   * For air_purifier: take the window with the maximum triggers
-# - Enrich with vendor/last_seen/prediction_confidence/actions
-# - Numbering & display-name logic: if multiple devices share same label, add "(n)" to the display name.
-# -------------------------
-def process_pcap_auto(pcap_file, devices_from_frontend, window_size=1.0, summary_window=0.5, router_bssid=None):
+def process_pcap_auto(
+    pcap_file,
+    devices_from_frontend,
+    window_size=1.0,
+    summary_window=0.5,
+    router_bssid=None,
+):
     try:
         packets = rdpcap(pcap_file)
     except Exception as e:
         raise RuntimeError(f"Failed to read pcap '{pcap_file}': {e}")
 
-    # Build device_configs and frontend_map
     device_configs = []
     configured_macs = set()
     frontend_map = {}
-    # auxiliary mapping label -> list of {mac, ui_name, raw_device_name} to support numbering
     type_to_entries = {}
 
     for d in devices_from_frontend:
-        mac = normalize_mac(d.get("mac_address") or d.get("mac") or d.get("macAddress") or "")
+        mac = normalize_mac(
+            d.get("mac_address") or d.get("mac") or d.get("macAddress") or ""
+        )
         if not mac:
             continue
         ui_name = d.get("device_name") or d.get("device") or d.get("label") or ""
-        device_type = d.get("device_type") or d.get("deviceType") or normalize_label(ui_name) or ""
+        device_type = (
+            d.get("device_type")
+            or d.get("deviceType")
+            or normalize_label(ui_name)
+            or ""
+        )
         device_type = normalize_label(device_type)
 
-        device_configs.append({
-            "device_name": ui_name,
-            "device_type": device_type,
-            "mac1": mac,
-            "mac2": None,
-            "label": device_type
-        })
+        device_configs.append(
+            {
+                "device_name": ui_name,
+                "device_type": device_type,
+                "mac1": mac,
+                "mac2": None,
+                "label": device_type,
+            }
+        )
         configured_macs.add(mac)
 
         d_copy = dict(d)
@@ -548,41 +619,27 @@ def process_pcap_auto(pcap_file, devices_from_frontend, window_size=1.0, summary
         d_copy["device_name"] = ui_name
         frontend_map[mac] = d_copy
 
-        # populate type_to_entries
         if device_type not in type_to_entries:
             type_to_entries[device_type] = []
-        type_to_entries[device_type].append({
-            "mac": mac,
-            "ui_name": ui_name
-        })
+        type_to_entries[device_type].append({"mac": mac, "ui_name": ui_name})
 
-    # Prepare helper to compute display name for a mac/entry
     def make_display_name_for_mac(label, ui_name, mac):
-        """
-        label: normalized device_type (e.g. "switch", "door_sensor")
-        ui_name: frontend device_name (e.g. "switch_1" or "switch")
-        mac: normalized mac
-        """
-        friendly_type = format_device_name_for_output(label)  # "door_sensor" -> "Door Sensor"
+        friendly_type = format_device_name_for_output(label)
         entries = type_to_entries.get(label, [])
         count = len(entries)
 
         if count <= 1:
             return friendly_type
 
-        # try to extract numeric suffix from ui_name (e.g. "switch_1" -> 1)
         if ui_name:
             m = re.search(r"_([0-9]+)$", ui_name.strip())
             if m:
-                idx = int(m.group(1))
-                return f"{friendly_type} ({idx})"
+                return f"{friendly_type} ({int(m.group(1))})"
 
-        # fallback: assign index by position in entries list
         for pos, e in enumerate(entries, start=1):
             if normalize_mac(e.get("mac")) == mac:
                 return f"{friendly_type} ({pos})"
 
-        # if nothing found, just append (1..)
         return f"{friendly_type} (1)"
 
     normalized_router = normalize_mac(router_bssid) if router_bssid else None
@@ -627,7 +684,11 @@ def process_pcap_auto(pcap_file, devices_from_frontend, window_size=1.0, summary
         a1 = normalize_mac(pkt[Dot11].addr1) if pkt[Dot11].addr1 else None
         a2 = normalize_mac(pkt[Dot11].addr2) if pkt[Dot11].addr2 else None
         a3 = normalize_mac(pkt[Dot11].addr3) if pkt[Dot11].addr3 else None
-        if (a1 in interested_macs) or (a2 in interested_macs) or (a3 in interested_macs):
+        if (
+            (a1 in interested_macs)
+            or (a2 in interested_macs)
+            or (a3 in interested_macs)
+        ):
             filtered_packets.append(pkt)
 
     device_packet_counts = {}
@@ -648,7 +709,6 @@ def process_pcap_auto(pcap_file, devices_from_frontend, window_size=1.0, summary
                 count += 1
         device_packet_counts[mac1] = count
 
-    # Run per-device extraction (same as before) but we will combine results and then apply new windowing strategy grouped by label
     all_results = []
     for device in device_configs:
         device_type = device["device_type"]
@@ -656,11 +716,12 @@ def process_pcap_auto(pcap_file, devices_from_frontend, window_size=1.0, summary
         mac2 = device["mac2"]
         label = device["label"]
 
-        # if router not found, skip (logic depends on device<->router comms)
         if not mac2:
             continue
 
-        df = extract_features_for_mac_pair(filtered_packets, mac1, mac2, label, window_size)
+        df = extract_features_for_mac_pair(
+            filtered_packets, mac1, mac2, label, window_size
+        )
         if df.empty:
             continue
 
@@ -675,64 +736,68 @@ def process_pcap_auto(pcap_file, devices_from_frontend, window_size=1.0, summary
         return {
             "trigger_sequence": [],
             "total_devices": len(device_configs),
-            "router_bssid": normalized_router
+            "router_bssid": normalized_router,
         }
 
     final_df = pd.concat(all_results).sort_values("window_start").reset_index(drop=True)
 
-    # -------------------------
-    # NEW WINDOWING LOGIC (match standalone):
-    # Group by label (device_type) and:
-    #  - for air_purifier: choose window with max trigger_count
-    #  - for other labels: choose the FIRST triggering window
-    # Use sort=False to preserve the order of first appearance in final_df
-    # -------------------------
     trigger_sequence = []
+    seen_pairs = []
+    for _, row in final_df.iterrows():
+        pair = (row["label"], row["mac"])
+        if pair not in seen_pairs:
+            seen_pairs.append(pair)
 
-    for label, device_df in final_df.groupby("label", sort=False):
+    for label, mac in seen_pairs:
+        device_df = final_df[(final_df["label"] == label) & (final_df["mac"] == mac)]
         max_time = device_df["window_end"].max()
         current_start = 0.0
 
-        best_window = None  # used for air_purifier (max)
-        first_window_found = False  # used for others
-
-        # We'll record the representative device/mac for this label using first device row
-        rep_device_name = device_df["device"].iloc[0] if "device" in device_df.columns and len(device_df) else None
-        # If multiple macs appear for same label, choose the first mac as representative (to keep compatibility)
-        rep_mac = device_df["mac"].iloc[0] if "mac" in device_df.columns and len(device_df) else None
+        best_window = None
+        first_window_found = False
+        rep_device_name = (
+            device_df["device"].iloc[0]
+            if "device" in device_df.columns and len(device_df)
+            else None
+        )
 
         while current_start < max_time:
             current_end = current_start + summary_window
-            mask = (device_df["window_start"] >= current_start) & (device_df["window_start"] < current_end)
+            mask = (device_df["window_start"] >= current_start) & (
+                device_df["window_start"] < current_end
+            )
             window_df = device_df[mask]
 
             trigger_count = int(sum(window_df["predicted"] == "triggering"))
 
             if trigger_count > 0:
                 if label == "air_purifier":
-                    # keep the window with maximum triggers
-                    if best_window is None or trigger_count > best_window["trigger_count"]:
+                    if (
+                        best_window is None
+                        or trigger_count > best_window["trigger_count"]
+                    ):
                         best_window = {
                             "label": label,
                             "device_name": rep_device_name,
                             "device_type": label,
-                            "mac_address": rep_mac,
+                            "mac_address": mac,
                             "start": round(float(current_start), 3),
                             "end": round(float(current_end), 3),
-                            "trigger_count": int(trigger_count)
+                            "trigger_count": int(trigger_count),
                         }
                 else:
-                    # other devices: add first triggering window only
                     if not first_window_found:
-                        trigger_sequence.append({
-                            "label": label,
-                            "device_name": rep_device_name,
-                            "device_type": label,
-                            "mac_address": rep_mac,
-                            "start": round(float(current_start), 3),
-                            "end": round(float(current_end), 3),
-                            "trigger_count": int(trigger_count)
-                        })
+                        trigger_sequence.append(
+                            {
+                                "label": label,
+                                "device_name": rep_device_name,
+                                "device_type": label,
+                                "mac_address": mac,
+                                "start": round(float(current_start), 3),
+                                "end": round(float(current_end), 3),
+                                "trigger_count": int(trigger_count),
+                            }
+                        )
                         first_window_found = True
 
             current_start += summary_window
@@ -740,11 +805,9 @@ def process_pcap_auto(pcap_file, devices_from_frontend, window_size=1.0, summary
         if label == "air_purifier" and best_window is not None:
             trigger_sequence.append(best_window)
 
-    # After building trigger_sequence based on labels, enrich each entry with backend-specific info:
     enriched_sequence = []
     for entry in trigger_sequence:
         mac = entry.get("mac_address")
-        # If mac is None (possible if grouping by label produced no mac), try to find a matching row
         if not mac:
             rows = final_df[final_df["label"] == entry.get("label")]
             if not rows.empty:
@@ -752,46 +815,61 @@ def process_pcap_auto(pcap_file, devices_from_frontend, window_size=1.0, summary
 
         frontend_info = frontend_map.get(mac, {}) if mac else {}
 
-        vendor = frontend_info.get("vendor") or frontend_info.get("manufacturer") or frontend_info.get("vendor_name") or "Unknown"
-        last_seen = frontend_info.get("last_seen") or frontend_info.get("lastSeen") or frontend_info.get("lastSeenAt") or None
+        vendor = (
+            frontend_info.get("vendor")
+            or frontend_info.get("manufacturer")
+            or frontend_info.get("vendor_name")
+            or "Unknown"
+        )
+        last_seen = (
+            frontend_info.get("last_seen")
+            or frontend_info.get("lastSeen")
+            or frontend_info.get("lastSeenAt")
+            or None
+        )
         ui_name = frontend_info.get("device_name") or entry.get("device_name") or ""
-        device_type_label = frontend_info.get("device_type") or entry.get("device_type") or entry.get("label") or ""
+        device_type_label = (
+            frontend_info.get("device_type")
+            or entry.get("device_type")
+            or entry.get("label")
+            or ""
+        )
 
-        # produce friendly device_type (capitalized words)
         friendly_device_type = format_device_name_for_output(device_type_label)
-
-        # compute device_name display: if multiple devices of same device_type, append index
         display_device_name = make_display_name_for_mac(device_type_label, ui_name, mac)
-
-        # total packets (device<->router) from precomputed counts if mac available
         total_packets = device_packet_counts.get(mac, 0) if mac else 0
-
-        # compute data ratio from frontend packet_types if present
-        packet_types = frontend_info.get("packet_types") or frontend_info.get("packetTypes") or None
+        packet_types = (
+            frontend_info.get("packet_types")
+            or frontend_info.get("packetTypes")
+            or None
+        )
         data_ratio = None
         if packet_types and isinstance(packet_types, dict):
             data_count = packet_types.get("data", {}).get("count", 0)
-            total_count = (packet_types.get("data", {}).get("count", 0)
-                           + packet_types.get("management", {}).get("count", 0)
-                           + packet_types.get("control", {}).get("count", 0))
+            total_count = (
+                packet_types.get("data", {}).get("count", 0)
+                + packet_types.get("management", {}).get("count", 0)
+                + packet_types.get("control", {}).get("count", 0)
+            )
             data_ratio = (data_count / total_count) if total_count > 0 else 0.0
 
-        # compute total windows for confidence calculation - approximate using device windows in final_df
         device_rows = final_df[final_df["label"] == entry.get("label")]
         max_time = device_rows["window_end"].max() if not device_rows.empty else 0
-        total_windows = int(math.ceil(max_time / summary_window)) if max_time and summary_window > 0 else 0
+        total_windows = (
+            int(math.ceil(max_time / summary_window))
+            if max_time and summary_window > 0
+            else 0
+        )
 
-        # trigger_count already available
         trigger_count = int(entry.get("trigger_count", 0))
 
         pred_conf = calculate_prediction_confidence(
             trigger_count,
             total_windows,
             data_ratio if data_ratio is not None else 0.0,
-            total_packets
+            total_packets,
         )
 
-        # per-device filtered packets for richer evidence
         per_device_filtered = []
         if mac:
             for pkt in filtered_packets:
@@ -804,12 +882,17 @@ def process_pcap_auto(pcap_file, devices_from_frontend, window_size=1.0, summary
                 if mac in addrs:
                     per_device_filtered.append(pkt)
 
-        actions = detect_actions_for_device(frontend_info, device_rows, per_device_filtered, mac, normalized_router, summary_window)
+        actions = detect_actions_for_device(
+            frontend_info,
+            device_rows,
+            per_device_filtered,
+            mac,
+            normalized_router,
+            summary_window,
+        )
 
         enriched = {
-            # device_name: friendly labelled name (with numbering if necessary)
             "device_name": display_device_name,
-            # device_type: friendly device type label (no numbering)
             "device_type": friendly_device_type,
             "label": entry.get("label"),
             "mac_address": mac,
@@ -822,11 +905,10 @@ def process_pcap_auto(pcap_file, devices_from_frontend, window_size=1.0, summary
             "last_seen": last_seen,
             "total_packets": int(total_packets),
             "prediction_confidence": pred_conf,
-            "actions": actions
+            "actions": actions,
         }
         enriched_sequence.append(enriched)
 
-    # Sort by start and add order index
     enriched_sequence = sorted(enriched_sequence, key=lambda x: x["start"] or 0)
     for idx, item in enumerate(enriched_sequence, start=1):
         item["order"] = idx
@@ -834,24 +916,28 @@ def process_pcap_auto(pcap_file, devices_from_frontend, window_size=1.0, summary
     return {
         "trigger_sequence": enriched_sequence,
         "total_devices": len(device_configs),
-        "router_bssid": normalized_router
+        "router_bssid": normalized_router,
     }
 
 
-# -------------------------
-# Flask endpoint to call from frontend / Postman
-# (keeps same external contract)
-# -------------------------
 @deviceaction_bp.route("/analyze-actions", methods=["POST"])
 def analyze_actions_endpoint():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({"status":"error","error":"No JSON body provided"}), 400
+            return jsonify({"status": "error", "error": "No JSON body provided"}), 400
 
         devices = data.get("devices")
         if not devices or not isinstance(devices, list):
-            return jsonify({"status":"error","error":"Missing 'devices' array in request body"}), 400
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "error": "Missing 'devices' array in request body",
+                    }
+                ),
+                400,
+            )
 
         pcap_file = data.get("pcap_file")
         bssid = data.get("bssid")
@@ -859,16 +945,37 @@ def analyze_actions_endpoint():
         if not pcap_file:
             downloads_dir = r"D:\University of Ruhuna FoE\Common Modules\EE7802 Undergraduate Project\Shadow-Scan\backend\downloads"
             if not os.path.exists(downloads_dir):
-                return jsonify({"status":"error","error":"Downloads directory not found"}), 404
+                return (
+                    jsonify(
+                        {"status": "error", "error": "Downloads directory not found"}
+                    ),
+                    404,
+                )
 
-            capture_files = [f for f in os.listdir(downloads_dir) if f.endswith((".cap", ".pcap"))]
+            capture_files = [
+                f for f in os.listdir(downloads_dir) if f.endswith((".cap", ".pcap"))
+            ]
             if not capture_files:
-                return jsonify({"status":"error","error":"No capture files found in downloads directory"}), 404
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "error": "No capture files found in downloads directory",
+                        }
+                    ),
+                    404,
+                )
 
             capture_files_full = [os.path.join(downloads_dir, f) for f in capture_files]
             pcap_file = max(capture_files_full, key=os.path.getmtime)
 
-        analysis = process_pcap_auto(pcap_file=pcap_file, devices_from_frontend=devices, window_size=1.0, summary_window=1.0, router_bssid=bssid)
+        analysis = process_pcap_auto(
+            pcap_file=pcap_file,
+            devices_from_frontend=devices,
+            window_size=1.0,
+            summary_window=1.0,
+            router_bssid=bssid,
+        )
 
         trigger_sequence = analysis.get("trigger_sequence", [])
         router_bssid = analysis.get("router_bssid")
@@ -879,41 +986,67 @@ def analyze_actions_endpoint():
             mac = item.get("mac_address")
             if not mac:
                 continue
-            triggered_map[mac] = max(triggered_map.get(mac, 0), item.get("trigger_count", 0))
+            triggered_map[mac] = max(
+                triggered_map.get(mac, 0), item.get("trigger_count", 0)
+            )
 
         devices_processed = []
         for d in devices:
-            mac = normalize_mac(d.get("mac_address") or d.get("mac") or d.get("macAddress") or "")
+            mac = normalize_mac(
+                d.get("mac_address") or d.get("mac") or d.get("macAddress") or ""
+            )
             ui_name = d.get("device_name") or d.get("device") or ""
-            device_type = d.get("device_type") or d.get("deviceType") or normalize_label(ui_name) or ""
-            last_seen = d.get("last_seen") or d.get("lastSeen") or d.get("lastSeenAt") or None
+            device_type = (
+                d.get("device_type")
+                or d.get("deviceType")
+                or normalize_label(ui_name)
+                or ""
+            )
+            last_seen = (
+                d.get("last_seen") or d.get("lastSeen") or d.get("lastSeenAt") or None
+            )
 
-            vendor = d.get("vendor") or d.get("manufacturer") or d.get("vendor_name") or "Unknown"
+            vendor = (
+                d.get("vendor")
+                or d.get("manufacturer")
+                or d.get("vendor_name")
+                or "Unknown"
+            )
 
             packet_types = d.get("packet_types") or d.get("packetTypes") or None
             total_packets_frontend = None
             if packet_types and isinstance(packet_types, dict):
-                total_packets_frontend = (packet_types.get("data", {}).get("count", 0)
-                                          + packet_types.get("management", {}).get("count", 0)
-                                          + packet_types.get("control", {}).get("count", 0))
+                total_packets_frontend = (
+                    packet_types.get("data", {}).get("count", 0)
+                    + packet_types.get("management", {}).get("count", 0)
+                    + packet_types.get("control", {}).get("count", 0)
+                )
 
             trigger_count = triggered_map.get(mac, 0)
             triggered_flag = "yes" if trigger_count > 0 else "no"
 
-            actions = detect_actions_for_device(d, None, [], mac, router_bssid, summary_window=1.0)
+            actions = detect_actions_for_device(
+                d, None, [], mac, router_bssid, summary_window=1.0
+            )
 
-            devices_processed.append({
-                "device_name": ui_name,
-                "device_type": device_type,
-                "mac_address": mac,
-                "last_seen": last_seen,
-                "vendor": vendor,
-                "total_packets": int(total_packets_frontend) if total_packets_frontend is not None else 0,
-                "isTriggered": triggered_flag,
-                "trigger_count": int(trigger_count),
-                "isActive": "yes",
-                "actions": actions
-            })
+            devices_processed.append(
+                {
+                    "device_name": ui_name,
+                    "device_type": device_type,
+                    "mac_address": mac,
+                    "last_seen": last_seen,
+                    "vendor": vendor,
+                    "total_packets": (
+                        int(total_packets_frontend)
+                        if total_packets_frontend is not None
+                        else 0
+                    ),
+                    "isTriggered": triggered_flag,
+                    "trigger_count": int(trigger_count),
+                    "isActive": "yes",
+                    "actions": actions,
+                }
+            )
 
         device_sequence = []
         for item in trigger_sequence:
@@ -928,10 +1061,10 @@ def analyze_actions_endpoint():
             "device_sequence": device_sequence,
             "devices_processed": devices_processed,
             "total_devices_processed": total_devices,
-            "analysis_timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+            "analysis_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
         return jsonify(response)
 
     except Exception as e:
         print(f"[ERROR] analyze-actions failed: {e}")
-        return jsonify({"status":"error","error": str(e)}), 500
+        return jsonify({"status": "error", "error": str(e)}), 500

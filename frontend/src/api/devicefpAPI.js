@@ -1,4 +1,3 @@
-// devicefpAPI.js
 const API_BASE_URL = 'http://localhost:5000/api/devicefp';
 
 /**
@@ -31,30 +30,18 @@ export const analyzeLatestCapture = async (bssid = null) => {
   }
 };
 
-/**
- * Helper: format raw device type string to user-friendly label
- * Examples:
- *  - "switch" -> "Switch"
- *  - "door_sensor" -> "Door Sensor"
- *  - "switch_1" -> "Switch" (we strip numeric suffix if present)
- */
 const formatDeviceTypeString = (raw) => {
   if (!raw && raw !== '') return '';
   const s = String(raw || '').trim().toLowerCase();
 
   if (!s) return '';
 
-  // If looks like "name_N" (e.g. switch_1) strip the trailing number section
-  // but only if it's separated by underscore and last token is a number.
   const parts = s.split('_');
   if (parts.length > 1 && /^\d+$/.test(parts[parts.length - 1])) {
     parts.pop();
   }
 
-  // If user already supplied a canonical device_type like "switch" use it
-  // Join remaining parts and replace underscores with spaces
   const joined = parts.join(' ');
-  // Capitalize each word
   const formatted = joined
     .split(' ')
     .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : ''))
@@ -66,13 +53,10 @@ const formatDeviceTypeString = (raw) => {
 
 
 export const formatDeviceInfo = (device = {}) => {
-  // Determine raw type:
-  // Prefer device.device_type (explicit), otherwise extract base from device_name
   let rawType = '';
   if (device.device_type && String(device.device_type).trim() !== '') {
     rawType = String(device.device_type).trim();
   } else if (device.device_name && String(device.device_name).trim() !== '') {
-    // e.g. "switch_1" -> take "switch"
     const base = String(device.device_name).trim().split('_')[0];
     rawType = base;
   } else {
@@ -91,10 +75,10 @@ export const formatDeviceInfo = (device = {}) => {
   const controlPercentage = device.packet_types?.control?.percentage ?? 0;
 
   return {
-    name: formattedType,               // friendly name for UI (e.g. "Door Sensor")
-    device_type: formattedType,        
-    device_type_raw: rawType,  
-    device_name: device.device_name,        
+    name: formattedType,
+    device_type: formattedType,
+    device_type_raw: rawType,
+    device_name: device.device_name,
     mac: device.mac_address || 'N/A',
     vendor: device.vendor || 'Unknown',
     total_packets: totalPackets,
@@ -105,13 +89,11 @@ export const formatDeviceInfo = (device = {}) => {
     dataPercentage: dataPercentage,
     managementPercentage: managementPercentage,
     controlPercentage: controlPercentage,
-    // Time / signal
     firstSeen: device.first_seen || 'N/A',
     lastSeen: device.last_seen || 'N/A',
     avgSignalStrength: device.avg_signal_strength ?? null,
     connectedToRouter: !!device.connected_to_router,
     confidence: typeof device.confidence === 'number' ? device.confidence : 0,
-    // include raw payload for debugging if needed
     _raw: device,
   };
 };
@@ -148,7 +130,7 @@ export const filterDevicesByConfidence = (devices, level = 'all') => {
   if (level === 'all') return devices;
 
   return devices.filter((device) => {
-    const confidence = (device.confidence ?? device.confidence === 0) ? (device.confidence ?? 0) : (device.confidence ?? 0);
+    const confidence = device.confidence ?? 0;
     switch (level.toLowerCase()) {
       case 'high':
         return confidence >= 0.8;
@@ -174,14 +156,12 @@ export const sortDevices = (devices, field = 'total_packets', order = 'desc') =>
     let aValue = a[field];
     let bValue = b[field];
 
-    // Handle nested fields like packet_types.data.count
     if (field.includes('.')) {
       const parts = field.split('.');
       aValue = parts.reduce((obj, key) => obj?.[key], a);
       bValue = parts.reduce((obj, key) => obj?.[key], b);
     }
 
-    // Fallbacks
     if (aValue === undefined || aValue === null) aValue = 0;
     if (bValue === undefined || bValue === null) bValue = 0;
 
@@ -192,12 +172,6 @@ export const sortDevices = (devices, field = 'total_packets', order = 'desc') =>
   });
 };
 
-/**
- * Get device statistics summary
- * Accepts devices array directly from backend (raw) or formatted objects.
- * @param {Array} devices - Array of device objects
- * @returns {Object} Statistics summary
- */
 export const getDeviceStatistics = (devices) => {
   if (!devices || devices.length === 0) {
     return {
@@ -211,9 +185,7 @@ export const getDeviceStatistics = (devices) => {
     };
   }
 
-  // Support both raw backend objects and formatted objects
   const totalPackets = devices.reduce((sum, d) => {
-    // prefer backend-style total_packets else totalPackets else 0
     return sum + (d.total_packets ?? d.totalPackets ?? 0);
   }, 0);
 

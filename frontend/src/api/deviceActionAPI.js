@@ -23,12 +23,13 @@ export const analyzeDeviceActions = async (devices, bssid, pcapFile) => {
         control: { count: device.controlPackets || 0 }
       },
       avg_signal_strength: device.avgSignalStrength,
-      connected_to_router: device.connectedToRouter
+      connected_to_router: device.connectedToRouter,
+      last_seen: device.last_seen
     }));
 
     const requestBody = {
       devices: transformedDevices,
-      bssid: bssid,
+      bssid,
       pcap_file: pcapFile
     };
 
@@ -53,117 +54,6 @@ export const analyzeDeviceActions = async (devices, bssid, pcapFile) => {
   }
 };
 
-/**
- * Get action statistics from enriched devices
- * @param {Array} devices - Array of devices with action data
- * @returns {Object} Statistics summary
- */
-export const getActionStatistics = (devices) => {
-  if (!devices || devices.length === 0) {
-    return {
-      totalDevices: 0,
-      activeDevices: 0,
-      triggeredDevices: 0,
-      notTriggeredDevices: 0,
-      nonTriggerableDevices: 0,
-    };
-  }
-
-  const activeDevices = devices.filter((d) => d.is_active).length;
-  const triggeredDevices = devices.filter((d) => d.is_triggered === true).length;
-  const notTriggeredDevices = devices.filter(
-    (d) => d.is_triggered === false && d.is_active
-  ).length;
-  const nonTriggerableDevices = devices.filter((d) => d.is_triggered === null).length;
-
-  return {
-    totalDevices: devices.length,
-    activeDevices,
-    triggeredDevices,
-    notTriggeredDevices,
-    nonTriggerableDevices,
-  };
-};
-
-/**
- * Filter devices by trigger status
- * @param {Array} devices - Array of device objects
- * @param {string} status - Filter status ('triggered', 'not_triggered', 'non_triggerable', 'all')
- * @returns {Array} Filtered devices
- */
-export const filterDevicesByTriggerStatus = (devices, status = 'all') => {
-  if (status === 'all') return devices;
-
-  return devices.filter((device) => {
-    switch (status.toLowerCase()) {
-      case 'triggered':
-        return device.is_triggered === true;
-      case 'not_triggered':
-        return device.is_triggered === false;
-      case 'non_triggerable':
-        return device.is_triggered === null;
-      default:
-        return true;
-    }
-  });
-};
-
-/**
- * Get trigger status label
- * @param {boolean|null} isTriggered - Trigger status
- * @returns {string} Status label
- */
-export const getTriggerStatusLabel = (isTriggered) => {
-  if (isTriggered === null) return 'N/A';
-  return isTriggered ? 'Triggered' : 'Not Triggered';
-};
-
-/**
- * Get trigger status color for UI
- * @param {boolean|null} isTriggered - Trigger status
- * @returns {string} Color code
- */
-export const getTriggerStatusColor = (isTriggered) => {
-  if (isTriggered === null) return '#6b7280'; // Gray
-  return isTriggered ? '#ef4444' : '#10b981'; // Red for triggered, Green for not triggered
-};
-
-/**
- * Sort devices by trigger count
- * @param {Array} devices - Array of device objects
- * @param {string} order - Sort order ('asc' or 'desc')
- * @returns {Array} Sorted devices
- */
-export const sortDevicesByTriggerCount = (devices, order = 'desc') => {
-  return [...devices].sort((a, b) => {
-    const aCount = a.trigger_count || 0;
-    const bCount = b.trigger_count || 0;
-
-    if (order === 'asc') {
-      return aCount > bCount ? 1 : -1;
-    }
-    return aCount < bCount ? 1 : -1;
-  });
-};
-
-/**
- * Format device actions for display
- * @param {Array} actions - Array of action strings
- * @returns {Array} Formatted actions
- */
-export const formatDeviceActions = (actions) => {
-  if (!actions || actions.length === 0) {
-    return ['No actions detected'];
-  }
-  return actions;
-};
-
 export default {
   analyzeDeviceActions,
-  getActionStatistics,
-  filterDevicesByTriggerStatus,
-  getTriggerStatusLabel,
-  getTriggerStatusColor,
-  sortDevicesByTriggerCount,
-  formatDeviceActions,
 };

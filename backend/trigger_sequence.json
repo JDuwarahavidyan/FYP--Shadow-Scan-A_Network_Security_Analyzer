@@ -2,49 +2,41 @@
     {
         "label": "door_sensor_1",
         "device": "door_sensor",
-        "start": 10.0,
-        "end": 20.0,
-        "trigger_count": 3,
+        "start": 0.0,
+        "end": 10.0,
+        "trigger_count": 4,
         "order": 1
+    },
+    {
+        "label": "switch_2",
+        "device": "switch",
+        "start": 0.0,
+        "end": 10.0,
+        "trigger_count": 18,
+        "order": 2
     },
     {
         "label": "switch_1",
         "device": "switch",
-        "start": 20.0,
-        "end": 30.0,
-        "trigger_count": 2,
-        "order": 2
-    },
-    {
-        "label": "motion_sensor_1",
-        "device": "motion_sensor",
-        "start": 30.0,
-        "end": 40.0,
-        "trigger_count": 28,
+        "start": 10.0,
+        "end": 20.0,
+        "trigger_count": 20,
         "order": 3
     },
     {
         "label": "tabel_lamp",
         "device": "tabel_lamp",
-        "start": 40.0,
-        "end": 50.0,
-        "trigger_count": 30,
+        "start": 50.0,
+        "end": 60.0,
+        "trigger_count": 18,
         "order": 4
     },
     {
         "label": "air_purifier",
         "device": "air_purifier",
-        "start": 80.0,
-        "end": 90.0,
-        "trigger_count": 164,
+        "start": 60.0,
+        "end": 70.0,
+        "trigger_count": 10,
         "order": 5
-    },
-    {
-        "label": "power_strip",
-        "device": "power_strip",
-        "start": 80.0,
-        "end": 90.0,
-        "trigger_count": 41,
-        "order": 6
     }
 ]

@@ -93,9 +93,11 @@ export function FingerprintResults({ fileUrl, parsedData, onDevicesIdentified })
         const baseKey = deriveBaseKey(token); // canonical base key
         const formattedBase = formatDeviceType(baseKey); // "door_sensor" -> "Door Sensor"
 
-        // Decide display name (number only when multiple of same base exist)
+        // Special handling for camera devices: use actual device_name instead of numbering
         let displayName = formattedBase;
-        if (typeCounts[baseKey] > 1) {
+        if (baseKey === 'camera' || baseKey === 'baby_cam') {
+          displayName = formatDeviceType(device.device_name || baseKey);
+        } else if (typeCounts[baseKey] > 1) {
           typeIndex[baseKey] = (typeIndex[baseKey] || 0) + 1;
           displayName = `${formattedBase} (${typeIndex[baseKey]})`;
         }
@@ -103,7 +105,7 @@ export function FingerprintResults({ fileUrl, parsedData, onDevicesIdentified })
         return {
           mac: device.mac_address,
           vendor: device.vendor,
-          device_type: displayName,     // formatted label shown in UI (e.g. "Switch (1)")
+          device_type: displayName,     // formatted label shown in UI (e.g. "Switch (1)" or "Baby Cam")
           raw_type: device.device_type, // keep raw backend value (e.g. "switch" or "switch")
           device_name: device.device_name, // keep original name (switch_1 etc.)
           confidence: device.confidence ?? 0,
@@ -113,7 +115,8 @@ export function FingerprintResults({ fileUrl, parsedData, onDevicesIdentified })
           managementPackets: device.packet_types?.management?.count || 0,
           controlPackets: device.packet_types?.control?.count || 0,
           avgSignalStrength: device.avg_signal_strength,
-          connectedToRouter: device.connected_to_router
+          connectedToRouter: device.connected_to_router,
+          last_seen: device.last_seen
         };
       });
 
@@ -128,6 +131,8 @@ export function FingerprintResults({ fileUrl, parsedData, onDevicesIdentified })
           response.file_analyzed
         );
       }
+
+      console.log("Transformed Devices:", transformedDevices);
 
 
       addLog(`Fingerprinting complete! Found ${transformedDevices.length} devices.`);

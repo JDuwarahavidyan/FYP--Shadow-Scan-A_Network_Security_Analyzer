@@ -7,10 +7,12 @@ import requests
 
 devicefp_bp = Blueprint("devicefp", __name__)
 
-# Device -> list of MAC addresses (Option B)
+# -------------------------------------------------------------------
+# Known device MACs
+# -------------------------------------------------------------------
 DEVICE_MACS = {
     "plug": ["c0:f8:53:de:cf:2a", "c0:f8:53:df:18:ea", "3c:0b:59:4b:8c:27"],
-    "wall_socket": ["d8:d6:68:06:6d:65"],
+    "wall_socket": ["d8:d6:68:06:6d:65", "d8:d6:68:97:fb:2d"],
     "tabel_lamp": ["3c:0b:59:8f:25:42"],
     "switch": ["38:2c:e5:1d:02:fb", "38:2c:e5:1c:cf:6e"],
     "air_purifier": ["50:ec:50:94:7b:a3"],
@@ -21,8 +23,10 @@ DEVICE_MACS = {
     "power_strip": ["fc:3c:d7:53:f6:79"],
 }
 
-
-def normalize_mac(mac):
+# -------------------------------------------------------------------
+# Helpers
+# -------------------------------------------------------------------
+def normalize_mac(mac: str | None) -> str | None:
     if not mac:
         return None
     mac = mac.replace(" ", "").replace("-", ":").lower()
@@ -32,17 +36,19 @@ def normalize_mac(mac):
     return mac
 
 
-def format_device_name_for_display(device_name):
+def is_multicast_mac(mac: str) -> bool:
     """
-    NOTE: Not used for device_name in output (per your request).
-    Kept here if you want local display formatting later.
+    Multicast MACs have the least significant bit of the first octet set.
+    This will catch 01:00:5e:.. (IPv4 mcast), 33:33:.. (IPv6 mcast), etc.
     """
-    if not device_name:
-        return "Unknown"
-    return device_name.replace("_", " ").title()
+    try:
+        first_octet = int(mac.split(":")[0], 16)
+        return bool(first_octet & 0x01)
+    except Exception:
+        return False
 
 
-def get_vendor_from_api(mac_address):
+def get_vendor_from_api(mac_address: str) -> str | None:
     try:
         url = f"https://api.maclookup.app/v2/macs/{mac_address}"
         response = requests.get(url, timeout=5)
@@ -55,7 +61,7 @@ def get_vendor_from_api(mac_address):
         return None
 
 
-def calculate_confidence(stats):
+def calculate_confidence(stats: dict) -> float:
     packet_count = stats["packet_count"]
     has_data = stats["data_packets"] > 0
     connected_to_router = stats["connected_to_router"]
@@ -76,7 +82,7 @@ def calculate_confidence(stats):
     return min(confidence, 1.0)
 
 
-def is_locally_administered(mac):
+def is_locally_administered(mac: str) -> bool:
     try:
         first_octet = int(mac.split(":")[0], 16)
         return bool(first_octet & 0x02)
@@ -84,7 +90,7 @@ def is_locally_administered(mac):
         return False
 
 
-def mac_to_oui(mac):
+def mac_to_oui(mac: str | None) -> str | None:
     if not mac:
         return None
     parts = mac.split(":")
@@ -111,7 +117,10 @@ def build_mac_mappings():
 
     return mac_to_device, dict(oui_fallback_map), configured_macs
 
-
+# -------------------------------------------------------------------
+# Core MAC filter: ONLY devices connected to our router BSSID,
+# ignore multicast/broadcast/randomized etc.
+# -------------------------------------------------------------------
 def should_process_mac(
     mac_addr,
     mac_to_device,
@@ -126,64 +135,66 @@ def should_process_mac(
     oui_fallback_map=None,
     use_oui_fallback=False,
 ):
-    """
-    Decide whether to process this mac:
-      - If mac in configured list -> True (we fingerprint configured devices)
-      - Else -> only process as 'new_device' if it shows signs of being associated/connected to router:
-          - Data frames where bss_mac == router and device appears in addr1/addr2 (typical AP-mediated data)
-          - OR management frames that indicate association/authentication (assoc req/resp/reassoc/auth)
-    Returns (process: bool, device_name_or_none)
-    """
     if not mac_addr:
         return False, None
 
     mac_addr = mac_addr.lower()
+
+    # Skip broadcast
     if mac_addr == "ff:ff:ff:ff:ff:ff":
         return False, None
 
+    # Skip multicast (e.g., 01:00:5e:.., 33:33:..)
+    if is_multicast_mac(mac_addr):
+        # DEBUG
+        # print(f"[-] Skipping multicast MAC {mac_addr}")
+        return False, None
+
+    # Skip router's own MAC – we don't fingerprint the AP itself
     if mac_addr == normalized_bssid:
         return False, None
 
+    # Optional: skip locally-administered / randomized MACs
     if ignore_randomized and is_locally_administered(mac_addr):
+        # DEBUG
+        # print(f"[-] Skipping randomized MAC {mac_addr}")
         return False, None
 
-    # If it's a configured device, always process
+    # If it's in our configured list, always process
     if mac_addr in mac_to_device:
         return True, mac_to_device[mac_addr]
 
-    # OUI fallback if enabled
+    # OUI fallback: treat same OUI as same device type
     if use_oui_fallback and oui_fallback_map:
         oui = mac_to_oui(mac_addr)
         if oui and oui in oui_fallback_map:
             mapped = oui_fallback_map[oui][0]
             return True, mapped + " (oui_fallback)"
 
-    # For unknowns: only process if it appears to be actually connected to the router
+    # If we don't want unknowns at all, stop here
     if not include_unknown:
         return False, None
 
-    # Connected if:
-    #  - bss_mac equals the router's bssid AND (src or dst equals this mac) AND it's a data frame (type==2)
-    #  - OR it's a management frame (type==0) and subtype indicates assoc/auth (assoc req/resp/reassoc/auth)
+    # For unknown MACs: only accept as "new_device" if we see them in
+    # actual traffic WITH the router BSSID (data or association/auth).
     connected = False
     if bss_mac and normalized_bssid and bss_mac == normalized_bssid:
         if src_mac == mac_addr or dst_mac == mac_addr:
-            # If it's a data frame (type 2) going through AP (bssid), it's a typical station->AP comm
-            if packet_type == 2:
+            if packet_type == 2:  # data frame
                 connected = True
             else:
-                # If management frames that suggest association/authentication
-                # Common management subtypes: 0=assoc_req,1=assoc_resp,2=reassoc_req,3=reassoc_resp,4=probe_req,5=probe_resp,11=auth
+                # management frames that are part of association/auth
                 if packet_type == 0 and packet_subtype in (0, 1, 2, 3, 11):
                     connected = True
 
     if connected:
-        # treat as new_device (unknown but connected)
         return True, "new_device"
 
     return False, None
 
-
+# -------------------------------------------------------------------
+# Main fingerprint analysis
+# -------------------------------------------------------------------
 def analyze_device_fingerprints(
     file_path,
     bssid=None,
@@ -191,12 +202,6 @@ def analyze_device_fingerprints(
     ignore_randomized=False,
     oui_fallback=False,
 ):
-    """
-    - Only analyze frames that involve the router (router BSSID must be in src/dst/bss).
-    - For unknown MACs, only include them if they appear to be actually associated/connected (per should_process_mac).
-    - Do initial processing once per MAC (assign name, vendor lookup, set first_seen).
-    - Update counts/timestamps on every router-involved packet for each MAC.
-    """
     try:
         if not bssid:
             bssid = "14:eb:b6:be:d7:1e"
@@ -214,7 +219,6 @@ def analyze_device_fingerprints(
         if oui_fallback:
             print(f"[*] OUI fallback enabled with {len(oui_fallback_map)} OUIs.")
 
-        # Stats keyed by MAC address
         device_stats = defaultdict(
             lambda: {
                 "device_name": "Unknown",
@@ -234,30 +238,29 @@ def analyze_device_fingerprints(
         packets_processed = 0
         router_packets = 0
 
-        # Global counters across router-involved frames
         total_data_packets = 0
         total_management_packets = 0
         total_control_packets = 0
 
-        # track which MACs had initial processing performed (to avoid repeated heavy ops)
         processed_macs = set()
-
-        # Track observed configured and new devices for diagnostics
         observed_configured = set()
         discovered_new_devices = set()
 
+        # -----------------------------------------------------------
+        # Scan packets – ONLY keep frames where the router BSSID
+        # appears in src/dst/bss. Everything else is skipped.
+        # -----------------------------------------------------------
         for packet in packets:
             packets_processed += 1
 
             if not packet.haslayer(Dot11):
                 continue
 
-            # Normalize MACs
             src_mac = normalize_mac(packet[Dot11].addr2) if packet[Dot11].addr2 else None
             dst_mac = normalize_mac(packet[Dot11].addr1) if packet[Dot11].addr1 else None
             bss_mac = normalize_mac(packet[Dot11].addr3) if packet[Dot11].addr3 else None
 
-            # Only consider frames that involve router (router present as src/dst/bss)
+            # Skip frames that do NOT involve the router at all
             if normalized_bssid not in [src_mac, dst_mac, bss_mac]:
                 continue
 
@@ -285,13 +288,12 @@ def analyze_device_fingerprints(
 
             signal_strength = getattr(packet, "dBm_AntSignal", None)
 
-            # For each MAC in this router-involved frame, update counts every time.
-            # Do "initial processing" only once per MAC (vendor lookup, initial metadata).
+            # Try src, dst and bss MACs – but they will be filtered
+            # further by should_process_mac (multicast, router, etc.)
             for mac_addr in [src_mac, dst_mac, bss_mac]:
                 if not mac_addr:
                     continue
 
-                # skip router itself
                 if mac_addr == normalized_bssid:
                     continue
 
@@ -315,33 +317,27 @@ def analyze_device_fingerprints(
 
                 stats = device_stats[mac_addr]
 
-                # If first time seen (initial processing)
                 if mac_addr not in processed_macs:
                     processed_macs.add(mac_addr)
 
-                    # mark observed configured if applicable
                     if mac_addr in configured_macs:
                         observed_configured.add(mac_addr)
 
                     if device_name == "new_device":
                         discovered_new_devices.add(mac_addr)
 
-                    # set basic metadata
                     stats["device_name"] = device_name
                     stats["mac"] = mac_addr
 
-                    # first_seen set to this packet time
                     if stats["first_seen"] is None:
                         stats["first_seen"] = timestamp
 
-                    # Vendor lookup once (best-effort)
                     if stats["vendor"] == "Unknown":
                         api_vendor = get_vendor_from_api(mac_addr)
                         if api_vendor:
                             stats["vendor"] = api_vendor
                             print(f"[*] Found vendor for {device_name} ({mac_addr}): {api_vendor}")
 
-                # --- ALWAYS update counters & timestamps for each router-involved packet ---
                 stats["packet_count"] += 1
                 if frame_type == "data":
                     stats["data_packets"] += 1
@@ -350,23 +346,24 @@ def analyze_device_fingerprints(
                 elif frame_type == "control":
                     stats["control_packets"] += 1
 
-                # update last_seen every time
                 if stats["last_seen"] is None or timestamp > stats["last_seen"]:
                     stats["last_seen"] = timestamp
 
-                # collect limited signal strength samples (keeps memory bounded in typical captures)
                 if signal_strength is not None:
                     stats["signal_strength"].append(signal_strength)
 
-                # connected_to_router true only if we determined it via should_process_mac's connected heuristics
                 stats["connected_to_router"] = True
 
         print(f"[*] Scanned {packets_processed} packets (router-involved frames: {router_packets})")
-        print(f"[*] Totals: data={total_data_packets}, management={total_management_packets}, control={total_control_packets}")
+        print(
+            f"[*] Totals: data={total_data_packets}, "
+            f"management={total_management_packets}, control={total_control_packets}"
+        )
 
-        # FIRST: compute how many devices of each base_type we will output (to decide numbering)
+        # ------------------------------------------------------------------
+        # Build nice output device list
+        # ------------------------------------------------------------------
         base_counts = defaultdict(int)
-        # Use the same base_type extraction logic as later
         for mac_addr, stats in device_stats.items():
             if stats["packet_count"] <= 0:
                 continue
@@ -375,14 +372,13 @@ def analyze_device_fingerprints(
             base_type = base_type.split()[0].strip() if base_type.split() else base_type
             base_counts[base_type] += 1
 
-        # Convert stats to results list and apply per-device-type numbering only when >1
-        type_indices = defaultdict(int)  # numbering index per base_type
+        type_indices = defaultdict(int)
         results = []
+
         for mac_addr, stats in device_stats.items():
             if stats["packet_count"] <= 0:
                 continue
 
-            # base device type (strip suffix like " (oui_fallback)" if present)
             base_type = stats["device_name"]
             if not base_type:
                 base_type = "unknown"
@@ -390,40 +386,76 @@ def analyze_device_fingerprints(
                 base_type = base_type.split("(")[0].strip()
                 base_type = base_type.split()[0].strip() if base_type.split() else base_type
 
-            # Decide name formatting:
-            # - If there's more than one device of this base_type in this run -> use numbering switch_1, switch_2
-            # - If only one -> keep base_type as the device_name (no suffix)
-            if base_counts.get(base_type, 0) > 1:
-                type_indices[base_type] += 1
-                idx = type_indices[base_type]
-                output_device_name = f"{base_type}_{idx}"
+            if base_type == "baby_cam":
+                output_device_name = "Baby Cam"
+                device_type_for_output = "Camera"
             else:
-                output_device_name = base_type
+                device_type_for_output = base_type.title()
+                if base_counts.get(base_type, 0) > 1:
+                    type_indices[base_type] += 1
+                    idx = type_indices[base_type]
+                    output_device_name = f"{device_type_for_output} {idx}"
+                else:
+                    output_device_name = device_type_for_output
 
             avg_signal = None
             if stats["signal_strength"]:
                 avg_signal = sum(stats["signal_strength"]) / len(stats["signal_strength"])
 
             total_device_packets = stats["packet_count"]
-            data_percentage = (stats["data_packets"] / total_device_packets) * 100 if total_device_packets else 0
-            mgmt_percentage = (stats["management_packets"] / total_device_packets) * 100 if total_device_packets else 0
-            ctrl_percentage = (stats["control_packets"] / total_device_packets) * 100 if total_device_packets else 0
+            data_percentage = (
+                (stats["data_packets"] / total_device_packets) * 100
+                if total_device_packets
+                else 0
+            )
+            mgmt_percentage = (
+                (stats["management_packets"] / total_device_packets) * 100
+                if total_device_packets
+                else 0
+            )
+            ctrl_percentage = (
+                (stats["control_packets"] / total_device_packets) * 100
+                if total_device_packets
+                else 0
+            )
 
-            first_seen = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(float(stats["first_seen"]))) if stats["first_seen"] else "N/A"
-            last_seen = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(float(stats["last_seen"]))) if stats["last_seen"] else "N/A"
+            first_seen = (
+                time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(float(stats["first_seen"])))
+                if stats["first_seen"]
+                else None
+            )
+            last_seen = (
+                time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(float(stats["last_seen"])))
+                if stats["last_seen"]
+                else None
+            )
+
+            # DEBUG: show raw timestamps and formatted ones
+            print(
+                f"[*] Device {output_device_name} ({stats['mac']}): "
+                f"first_seen_raw={stats['first_seen']} last_seen_raw={stats['last_seen']} "
+                f"first_seen={first_seen} last_seen={last_seen}"
+            )
 
             device_info = {
-                # do NOT format device_name: frontend will format. Provide numbering only when needed.
                 "device_name": output_device_name,
-                # device_type is the base type before numbering
-                "device_type": base_type,
+                "device_type": device_type_for_output,
                 "mac_address": stats["mac"],
                 "vendor": stats["vendor"],
                 "total_packets": total_device_packets,
                 "packet_types": {
-                    "data": {"count": stats["data_packets"], "percentage": round(data_percentage, 2)},
-                    "management": {"count": stats["management_packets"], "percentage": round(mgmt_percentage, 2)},
-                    "control": {"count": stats["control_packets"], "percentage": round(ctrl_percentage, 2)},
+                    "data": {
+                        "count": stats["data_packets"],
+                        "percentage": round(data_percentage, 2),
+                    },
+                    "management": {
+                        "count": stats["management_packets"],
+                        "percentage": round(mgmt_percentage, 2),
+                    },
+                    "control": {
+                        "count": stats["control_packets"],
+                        "percentage": round(ctrl_percentage, 2),
+                    },
                 },
                 "first_seen": first_seen,
                 "last_seen": last_seen,
@@ -433,10 +465,21 @@ def analyze_device_fingerprints(
             }
             results.append(device_info)
 
-        # Diagnostics
-        not_seen = sorted(list(configured_macs - observed_configured)) if 'observed_configured' in locals() else []
-        known_observed = sorted(list(observed_configured)) if 'observed_configured' in locals() else []
-        new_devices = sorted(list(discovered_new_devices)) if 'discovered_new_devices' in locals() else []
+        not_seen = (
+            sorted(list(configured_macs - observed_configured))
+            if "observed_configured" in locals()
+            else []
+        )
+        known_observed = (
+            sorted(list(observed_configured))
+            if "observed_configured" in locals()
+            else []
+        )
+        new_devices = (
+            sorted(list(discovered_new_devices))
+            if "discovered_new_devices" in locals()
+            else []
+        )
 
         diagnostics = {
             "configured_macs_total": len(configured_macs),
@@ -456,18 +499,11 @@ def analyze_device_fingerprints(
         print(f"[ERROR] {e}")
         raise e
 
-
+# -------------------------------------------------------------------
+# Flask route
+# -------------------------------------------------------------------
 @devicefp_bp.route("/analyze-latest", methods=["POST"])
 def analyze_latest_capture():
-    """
-    POST JSON (all optional):
-    {
-      "bssid": "14:eb:..",            # override router BSSID
-      "include_unknown": true,        # include new devices that are actually connected to router
-      "ignore_randomized": false,     # skip locally-administered MACs
-      "oui_fallback": false           # try OUI fallback mapping
-    }
-    """
     try:
         data = request.get_json() or {}
         bssid = data.get("bssid")
@@ -490,7 +526,7 @@ def analyze_latest_capture():
         if bssid:
             print(f"[*] Using provided BSSID: {bssid}")
         else:
-            print(f"[*] Using default BSSID")
+            print("[*] Using default BSSID")
 
         analysis = analyze_device_fingerprints(
             latest_file,
